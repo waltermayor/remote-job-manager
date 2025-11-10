@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  {{PROJECT_NAME}}:
+    build:
+      context: ../../generated/{{PROJECT_NAME}}
+      dockerfile: Dockerfile
+    ports:
+      - "{{EXPOSE_PORT}}:{{EXPOSE_PORT}}"
+    container_name: {{PROJECT_NAME}}

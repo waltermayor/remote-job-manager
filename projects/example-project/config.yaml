@@ -1,0 +1,6 @@
+# Configuración para el proyecto de ejemplo
+project_name: example-project
+repo_url: https://github.com/tryber/sd-034-project-trybewallet.git
+install_command: "npm install"
+test_command: "npm test"
+expose_port: 3000

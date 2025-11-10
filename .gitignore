@@ -1,0 +1,8 @@
+# Directorio de archivos generados
+generated/
+
+# Archivos temporales
+*.tmp
+*.log
+*.swp
+GEMINI.md
