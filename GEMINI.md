@@ -54,7 +54,7 @@ remote-job-manager/
 
 1.  [ ] **Implement Project Initialization:** Flesh out the `init` command and automatic initialization for other commands.
 2.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile and an empty `requirements.txt` file from a template.
-3.  [ ] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
+3.  [x] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
 4.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
 5.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
 6.  [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
@@ -93,9 +93,9 @@ job-manager <command> [options]
     ```bash
     job-manager template --project-name my-new-project
     ```
-*   **Build a container image (once implemented):**
+*   **Build a container image:**
     ```bash
-    job-manager build --project-name my-new-project --config-file examples/simple_job.yaml
+    job-manager build --project-name my-new-project
     ```
 *   **Get help for a command:**
     ```bash

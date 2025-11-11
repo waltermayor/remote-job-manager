@@ -1,6 +1,7 @@
 import typer
 from rich import print
 from pathlib import Path
+import subprocess
 from .utils import ensure_project_initialized
 
 app = typer.Typer()
@@ -15,14 +16,43 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
 
 @app.command()
 def build(
-    config_file: str,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
 ):
     """
-    Build a container image using a configuration file.
+    Build a Docker image from the Dockerfile in the project's output directory.
     """
     ensure_project_initialized(project_name)
-    print(f"Building with config: {config_file} for project: {project_name}")
+    
+    project_dir = Path("output_"+project_name)
+    dockerfile_path = project_dir / "Dockerfile"
+    image_tag = f"{project_name}:latest"
+
+    if not dockerfile_path.exists():
+        print(f"Error: Dockerfile not found at {dockerfile_path}")
+        raise typer.Exit(code=1)
+
+    print(f"Building Docker image for project: {project_name}")
+    print(f"Image tag: {image_tag}")
+
+    try:
+        process = subprocess.Popen(
+            ["docker", "build", "-t", image_tag, "-f", str(dockerfile_path), str(project_dir)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for line in iter(process.stdout.readline, ''):
+            print(line, end='')
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, process.args)
+        print(f"\nDocker image built successfully: {image_tag}")
+    except FileNotFoundError:
+        print("Error: 'docker' command not found. Please ensure Docker is installed and in your PATH.")
+        raise typer.Exit(code=1)
+    except subprocess.CalledProcessError as e:
+        print(f"\nError building Docker image. Return code: {e.returncode}")
+        raise typer.Exit(code=1)
 
 @app.command()
 def convert(
