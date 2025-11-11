@@ -52,7 +52,7 @@ def template(
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to create the Dockerfile for."),
 ):
     """
-    Create a new Dockerfile from a template for a Python project.
+    Create a new Dockerfile and an empty requirements.txt file from a template for a Python project.
     """
     ensure_project_initialized(project_name)
     template_path = Path(__file__).parent / "templates" / "Dockerfile.template"
@@ -63,10 +63,15 @@ def template(
 
     output_dir = Path("output_"+project_name)
     dockerfile_path = output_dir / "Dockerfile"
+    requirements_path = output_dir / "requirements.txt"
 
     with open(dockerfile_path, "w") as f:
         f.write(dockerfile_content)
-    print(f"Dockerfile created successfully from template at: {dockerfile_path}")
+
+    with open(requirements_path, "w") as f:
+        pass  # Create an empty file
+
+    print(f"Dockerfile and requirements.txt created successfully in: {output_dir}")
 
 
 if __name__ == "__main__":
