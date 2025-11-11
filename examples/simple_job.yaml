@@ -1,0 +1,19 @@
+job:
+  name: my-simple-job
+  description: "A simple example job"
+
+container:
+  image_name: "my-container"
+  dockerfile: "Dockerfile"
+  build_context: "."
+
+slurm:
+  partition: "deve"
+  nodes: 1
+  ntasks: 1
+  mem: "4G"
+  time: "01:00:00"
+  script: |
+    #!/bin/bash
+    echo "Hello from the container!"
+    sleep 30
