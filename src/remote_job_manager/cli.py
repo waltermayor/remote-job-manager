@@ -2,17 +2,70 @@ import typer
 from rich import print
 from pathlib import Path
 import subprocess
+import shutil
 from .utils import ensure_project_initialized
+from .config import load_project_config, save_project_config
+from .web_utils import clone_repo, download_dataset
+from .docker_utils import run_test_in_container
 
 app = typer.Typer()
 
 @app.command()
 def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to initialize.")):
     """
-    Initialize a new project by creating an output directory.
+    Initialize a new project by creating an output directory and a config.yaml file.
     """
     ensure_project_initialized(project_name)
-    print(f"Project '{project_name}' is initialized.")
+    
+    config = {
+        "general": {
+            "project_name": project_name,
+        },
+        "test": {
+            "repo_url": "",
+            "dataset_command": "",
+            "run_command": "",
+        }
+    }
+
+    if typer.confirm("Do you want to configure the test information now?"):
+        print("Please provide the following information for your project's test setup:")
+        repo_url = typer.prompt("Git repository URL")
+        dataset_command = typer.prompt("Dataset download command (optional)", default="")
+        run_command = typer.prompt("Test run command")
+        config["test"] = {
+            "repo_url": repo_url,
+            "dataset_command": dataset_command,
+            "run_command": run_command,
+        }
+
+    save_project_config(project_name, config)
+    print(f"Project '{project_name}' initialized successfully.")
+
+@app.command()
+def configure(project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to configure.")):
+    """
+    Configure the test information for an existing project.
+    """
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+
+    print("Please provide the new test information (press Enter to keep the current value):")
+    
+    repo_url = typer.prompt("Git repository URL", default=config.get("test", {}).get("repo_url", ""))
+    dataset_command = typer.prompt("Dataset download command (optional)", default=config.get("test", {}).get("dataset_command", ""))
+    run_command = typer.prompt("Test run command", default=config.get("test", {}).get("run_command", ""))
+
+    config["test"] = {
+        "repo_url": repo_url,
+        "dataset_command": dataset_command,
+        "run_command": run_command,
+    }
+
+    save_project_config(project_name, config)
+    print(f"Configuration for project '{project_name}' updated successfully.")
 
 @app.command()
 def build(
@@ -23,7 +76,7 @@ def build(
     """
     ensure_project_initialized(project_name)
     
-    project_dir = Path("output_"+project_name)
+    project_dir = Path("output") / project_name
     dockerfile_path = project_dir / "Dockerfile"
     image_tag = f"{project_name}:latest"
 
@@ -91,7 +144,7 @@ def template(
 
     dockerfile_content = template_content.replace("{{ project_name }}", project_name)
 
-    output_dir = Path("output_"+project_name)
+    output_dir = Path("output") / project_name
     dockerfile_path = output_dir / "Dockerfile"
     requirements_path = output_dir / "requirements.txt"
 
@@ -102,6 +155,41 @@ def template(
         pass  # Create an empty file
 
     print(f"Dockerfile and requirements.txt created successfully in: {output_dir}")
+
+@app.command()
+def test(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to test."),
+):
+    """
+    Test a Docker image by cloning a repository, downloading a dataset, and running a command from the project's config.yaml.
+    """
+    ensure_project_initialized(project_name)
+    
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+
+    test_config = config.get("test", {})
+    repo_url = test_config.get("repo_url")
+    dataset_command = test_config.get("dataset_command")
+    run_command = test_config.get("run_command")
+
+    if not repo_url or not run_command:
+        print("Error: 'repo_url' and 'run_command' must be defined in the 'test' section of config.yaml.")
+        print("You can set them by running 'job-manager configure --project-name <project_name>'")
+        raise typer.Exit(code=1)
+
+    test_dir = Path("output") / project_name / "test"
+    if test_dir.exists():
+        shutil.rmtree(test_dir)
+    test_dir.mkdir()
+
+    clone_repo(repo_url, test_dir)
+    download_dataset(dataset_command, test_dir)
+
+    image_tag = f"{project_name}:latest"
+    run_test_in_container(image_tag, test_dir, run_command)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ def ensure_project_initialized(project_name: str):
     Ensures that the output directory for a project exists.
     If the directory does not exist, it will be created.
     """
-    output_dir = Path("output_"+project_name)
+    output_dir =Path("output") / project_name
     if not output_dir.exists():
         print(f"Project '{project_name}' not initialized. Creating output directory...")
         output_dir.mkdir(parents=True)

@@ -1,0 +1,7 @@
+general:
+  project_name: horizon
+test:
+  dataset_command: wget -r -np -nH --cut-dirs=2 -A "*.npz" https://rail.eecs.berkeley.edu/datasets/ogbench/puzzle-4x5-play-100m-v0/
+  repo_url: https://github.com/seohongpark/horizon-reduction.git
+  run_command: python main.py --env_name=puzzle-4x5-play-oraclerep-v0 --dataset_dir=<YOUR_DATA_DIRECTORY>/puzzle-4x5-play-1b-v0
+    --agent=agents/sharsa.py
