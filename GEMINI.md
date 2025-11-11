@@ -25,6 +25,7 @@ remote-job-manager/
 │   └── ...
 ├── examples/           # Example configuration files and use cases
 │   └── simple_job.yaml
+├── output/             # Default directory for project outputs
 └── src/
     └── remote_job_manager/
         ├── __init__.py
@@ -33,8 +34,9 @@ remote-job-manager/
         ├── docker_builder.py # Logic for building Docker images
         ├── singularity_converter.py # Logic for Docker-to-Singularity conversion
         ├── slurm_submitter.py # Logic for generating and submitting SLURM scripts
-        └── templates/
-            └── Dockerfile.template
+        ├── templates/
+        │   └── Dockerfile.template
+        └── utils.py        # Helper functions
 ```
 
 ## 4. To-Do List
@@ -50,15 +52,16 @@ remote-job-manager/
 
 ### Future Tasks (Feature Implementation)
 
-1.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile from a template file.
-2.  [ ] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
-3.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
-4.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-5.  [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-6.  [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-7.  [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-8.  [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-9.  [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+1.  [ ] **Implement Project Initialization:** Flesh out the `init` command and automatic initialization for other commands.
+2.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile from a template file.
+3.  [ ] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
+4.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
+5.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+6.  [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+7.  [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+8.  [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+9.  [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+10. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
 ## 5. How to Run CLI Commands
 
@@ -82,13 +85,17 @@ job-manager <command> [options]
 
 **Examples:**
 
+*   **Initialize a new project:**
+    ```bash
+    job-manager init --project-name my-new-project
+    ```
 *   **Generate a Dockerfile template:**
     ```bash
     job-manager template --project-name my-new-project
     ```
 *   **Build a container image (once implemented):**
     ```bash
-    job-manager build --config-file examples/simple_job.yaml
+    job-manager build --project-name my-new-project --config-file examples/simple_job.yaml
     ```
 *   **Get help for a command:**
     ```bash
