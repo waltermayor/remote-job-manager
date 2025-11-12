@@ -235,14 +235,14 @@ def fix_and_rerun(
     test_dir = Path("output") / project_name / "test"
     workdir = "/test"
 
-    # # Initial setup from test command
-    # if not test_dir.exists():
-    #     test_dir.mkdir(parents=True)
+    # Initial setup from test command
+    if not test_dir.exists():
+        test_dir.mkdir(parents=True)
     
-    # repo_url = test_config.get("repo_url")
-    # dataset_command = test_config.get("dataset_command")
-    # clone_repo(repo_url, test_dir)
-    # download_dataset(dataset_command, test_dir)
+    repo_url = test_config.get("repo_url")
+    dataset_command = test_config.get("dataset_command")
+    clone_repo(repo_url, test_dir)
+    download_dataset(dataset_command, test_dir)
     
     run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
 
@@ -268,7 +268,10 @@ def fix_and_rerun(
                 default="", show_default=False
             )
             if fix_cmd:
-                run_command_in_container(container_name, fix_cmd, workdir)
+                fix_return_code = run_command_in_container(container_name, fix_cmd, workdir)
+                if fix_return_code != 0:
+                    print("[bold yellow]The fix command failed. Please try another command.[/bold yellow]")
+                    continue
             
             print("--- Running Test ---")
             run_command_in_container(container_name, run_command, workdir)
