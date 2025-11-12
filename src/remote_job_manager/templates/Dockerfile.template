@@ -1,32 +1,41 @@
-
-# NVIDIA base image
+# NVIDIA base image con CUDA 12.2
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 LABEL created_by="remote_job_manager"
 
-# Evitar prompts interactivos de apt
+# Evitar prompts interactivos y desactivar W&B online
 ENV DEBIAN_FRONTEND=noninteractive
 ENV WANDB_MODE=offline
 
-# Instalar dependencias básicas y una versión específica de Python
-RUN apt-get update && apt-get install -y \
-    python3.10 \
-    python3-pip \
-    python3.10-venv \
+# Instalar Python 3.10 y utilidades base
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 python3-pip python3.10-venv curl ca-certificates git \
     && ln -sf /usr/bin/python3.10 /usr/bin/python \
     && pip3 install --upgrade pip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Instalar uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
-# Set working directory
+# Variables necesarias para CUDA en contenedores
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:${LD_LIBRARY_PATH}
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Crear y moverse al directorio de trabajo del proyecto
 WORKDIR /{{ project_name }}
 
-# Copy and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
+# Copiar los archivos del proyecto
 COPY . .
 
-# Command to run the application
-CMD ["python", "app.py"]
+# Instalar dependencias del proyecto con uv (usando requirements.txt)
+RUN if [ -f requirements.txt ]; then uv pip install -r requirements.txt; fi
+
+# Comando final para verificar GPU y CUDA desde Python
+CMD bash -c "\
+    echo '=== NVIDIA-SMI ===' && nvidia-smi && \
+    echo '\n=== Python version ===' && python --version && \
+    echo '\n=== PyTorch CUDA availability ===' && \
+    uv run python -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available())' \
+"
