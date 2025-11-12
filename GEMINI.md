@@ -51,9 +51,29 @@ general:
 test:
   repo_url: "https://github.com/user/repo.git"
   dataset_command: |
-    echo "No dataset command specified."
+    wget -O dataset.zip https://example.com/dataset.zip
+    unzip dataset.zip
   run_command: |
-    echo "No run command specified."
+    python main.py --data_dir=<YOUR_DATA_DIRECTORY>/unzipped_dataset
+```
+**Example `Dockerfile.template` with LABEL:**
+```Dockerfile
+# Python base image
+FROM python:3.9-slim
+LABEL created_by="remote_job_manager"
+
+# Set working directory
+WORKDIR /{{ project_name }}
+
+# Copy and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Command to run the application
+CMD ["python", "app.py"]
 ```
 
 ## 4. To-Do List
@@ -73,14 +93,15 @@ test:
 2.  [x] **Implement Project Configuration:** Implement the `configure` command to allow users to update the project configuration.
 3.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile and an empty `requirements.txt` file from a template.
 4.  [x] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
-5.  [x] **Implement Docker Tester:** Implement the `test` command by refactoring the logic into smaller, more focused utility functions in `web_utils.py` and `docker_utils.py`.
-6.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
-7.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-8.  [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-9.  [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-10. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-11. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-12. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with placeholder replacement for the data directory.
+6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by the tool.
+7.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
+8.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+9.  [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+10. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+11. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+12. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+13. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
 ## 5. How to Run CLI Commands
 
@@ -123,6 +144,10 @@ job-manager <command> [options]
 *   **Test a container image:**
     ```bash
     job-manager test --project-name my-new-project
+    ```
+*   **List container images created by this tool:**
+    ```bash
+    job-manager list-images
     ```
 *   **Get help for a command:**
     ```bash

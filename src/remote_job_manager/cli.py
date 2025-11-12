@@ -6,7 +6,7 @@ import shutil
 from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
-from .docker_utils import run_test_in_container
+from .docker_utils import run_test_in_container, list_images
 
 app = typer.Typer()
 
@@ -188,9 +188,18 @@ def test(
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
 
+    # Replace placeholder in run_command
+    run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
+
     image_tag = f"{project_name}:latest"
     run_test_in_container(image_tag, test_dir, run_command)
 
+@app.command(name="list-images")
+def list_images_command():
+    """
+    List all Docker images created by this tool.
+    """
+    list_images()
 
 if __name__ == "__main__":
     app()

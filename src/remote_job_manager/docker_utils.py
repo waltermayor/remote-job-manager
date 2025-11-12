@@ -28,3 +28,20 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str):
     except subprocess.CalledProcessError as e:
         print(f"\nError running test command in Docker. Return code: {e.returncode}")
         raise typer.Exit(code=1)
+
+def list_images():
+    """
+    Lists all Docker images created by this tool.
+    """
+    print("Listing Docker images created by remote_job_manager...")
+    try:
+        subprocess.run(
+            ["docker", "images", "--filter", "label=created_by=remote_job_manager"],
+            check=True,
+        )
+    except FileNotFoundError:
+        print("Error: 'docker' command not found. Please ensure Docker is installed and in your PATH.")
+        raise typer.Exit(code=1)
+    except subprocess.CalledProcessError as e:
+        print(f"Error listing Docker images. Return code: {e.returncode}")
+        raise typer.Exit(code=1)
