@@ -25,6 +25,7 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             "repo_url": "",
             "dataset_command": "",
             "run_command": "",
+            "gpus": False,
         }
     }
 
@@ -33,10 +34,12 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
         repo_url = typer.prompt("Git repository URL")
         dataset_command = typer.prompt("Dataset download command (optional)", default="")
         run_command = typer.prompt("Test run command")
+        use_gpus = typer.confirm("Enable GPU support for tests?")
         config["test"] = {
             "repo_url": repo_url,
             "dataset_command": dataset_command,
             "run_command": run_command,
+            "gpus": use_gpus,
         }
 
     save_project_config(project_name, config)
@@ -57,11 +60,13 @@ def configure(project_name: str = typer.Option(..., "--project-name", "-n", help
     repo_url = typer.prompt("Git repository URL", default=config.get("test", {}).get("repo_url", ""))
     dataset_command = typer.prompt("Dataset download command (optional)", default=config.get("test", {}).get("dataset_command", ""))
     run_command = typer.prompt("Test run command", default=config.get("test", {}).get("run_command", ""))
+    use_gpus = typer.confirm("Enable GPU support for tests?", default=config.get("test", {}).get("gpus", False))
 
     config["test"] = {
         "repo_url": repo_url,
         "dataset_command": dataset_command,
         "run_command": run_command,
+        "gpus": use_gpus,
     }
 
     save_project_config(project_name, config)
@@ -174,6 +179,7 @@ def test(
     repo_url = test_config.get("repo_url")
     dataset_command = test_config.get("dataset_command")
     run_command = test_config.get("run_command")
+    use_gpus = test_config.get("gpus", False)
 
     if not repo_url or not run_command:
         print("Error: 'repo_url' and 'run_command' must be defined in the 'test' section of config.yaml.")
@@ -192,7 +198,7 @@ def test(
     run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
 
     image_tag = f"{project_name}:latest"
-    run_test_in_container(image_tag, test_dir, run_command)
+    run_test_in_container(image_tag, test_dir, run_command, use_gpus)
 
 @app.command(name="list-images")
 def list_images_command():

@@ -3,15 +3,25 @@ from pathlib import Path
 from rich import print
 import typer
 
-def run_test_in_container(image_tag: str, test_dir: Path, run_command: str):
+def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_gpus: bool = False):
     """
     Runs a test command inside a Docker container.
     """
     print(f"Running test command in Docker container for image: {image_tag}")
 
+    docker_command = ["docker", "run", "--rm"]
+    if use_gpus:
+        docker_command.extend(["--gpus", "all"])
+    
+    docker_command.extend([
+        "-v", f"{test_dir.resolve()}:/test",
+        image_tag,
+        "sh", "-c", f"cd /test && {run_command}"
+    ])
+
     try:
         process = subprocess.Popen(
-            ["docker", "run", "--rm", "-v", f"{test_dir.resolve()}:/test", image_tag, "sh", "-c", f"cd /test && {run_command}"],
+            docker_command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
