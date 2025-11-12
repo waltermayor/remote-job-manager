@@ -94,7 +94,7 @@ CMD ["python", "app.py"]
 2.  [x] **Implement Project Configuration:** Implement the `configure` command to allow users to update the project configuration, including GPU support.
 3.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile and an empty `requirements.txt` file from a template.
 4.  [x] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
-5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with GPU support and placeholder replacement.
+5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with GPU support, placeholder replacement, and correct file permissions.
 6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by the tool.
 7.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
 8.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.

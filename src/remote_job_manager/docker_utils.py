@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 from rich import print
 import typer
+import os
 
 def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_gpus: bool = False):
     """
@@ -13,6 +14,12 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_
     if use_gpus:
         docker_command.extend(["--gpus", "all"])
     
+    # Get host user's UID and GID to run the container with the same user
+    # This avoids permission issues with files created in the mounted volume
+    uid = os.getuid()
+    gid = os.getgid()
+    docker_command.extend(["-u", f"{uid}:{gid}"])
+
     docker_command.extend([
         "-v", f"{test_dir.resolve()}:/test",
         image_tag,
