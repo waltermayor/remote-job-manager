@@ -96,13 +96,14 @@ CMD ["python", "app.py"]
 4.  [x] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
 5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with GPU support (using the NVIDIA Container Runtime), placeholder replacement, and correct file permissions.
 6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by the tool.
-7.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
-8.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-9.  [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-10. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-11. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-12. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-13. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+7.  [x] **Implement Interactive Fix and Rerun:** Implement the `fix-and-rerun` command to provide an interactive session for debugging dependencies.
+8.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
+9.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+10. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+11. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+12. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+13. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+14. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
 ## 5. How to Run CLI Commands
 
@@ -149,6 +150,10 @@ job-manager <command> [options]
 *   **List container images created by this tool:**
     ```bash
     job-manager list-images
+    ```
+*   **Interactively fix and rerun a test:**
+    ```bash
+    job-manager fix-and-rerun --project-name my-new-project
     ```
 *   **Get help for a command:**
     ```bash

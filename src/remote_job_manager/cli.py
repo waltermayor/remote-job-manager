@@ -3,10 +3,11 @@ from rich import print
 from pathlib import Path
 import subprocess
 import shutil
+import uuid
 from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
-from .docker_utils import run_test_in_container, list_images
+from .docker_utils import run_test_in_container, list_images, run_command_in_container
 
 app = typer.Typer()
 
@@ -206,6 +207,82 @@ def list_images_command():
     List all Docker images created by this tool.
     """
     list_images()
+
+@app.command(name="fix-and-rerun")
+def fix_and_rerun(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to fix and rerun."),
+):
+    """
+    Interactively fix a project's dependencies and re-run the test.
+    """
+    ensure_project_initialized(project_name)
+    
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+
+    test_config = config.get("test", {})
+    run_command = test_config.get("run_command")
+    use_gpus = test_config.get("gpus", False)
+
+    if not run_command:
+        print("Error: 'run_command' must be defined in the 'test' section of config.yaml.")
+        raise typer.Exit(code=1)
+
+    image_tag = f"{project_name}:latest"
+    container_name = f"fix-container-{uuid.uuid4()}"
+    test_dir = Path("output") / project_name / "test"
+    workdir = "/test"
+
+    # # Initial setup from test command
+    # if not test_dir.exists():
+    #     test_dir.mkdir(parents=True)
+    
+    # repo_url = test_config.get("repo_url")
+    # dataset_command = test_config.get("dataset_command")
+    # clone_repo(repo_url, test_dir)
+    # download_dataset(dataset_command, test_dir)
+    
+    run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
+
+    print(f"Starting a live container '{container_name}' for interactive testing...")
+    docker_run_cmd = [
+        "docker", "run", "-d", "--name", container_name,
+        "-v", f"{test_dir.resolve()}:{workdir}",
+    ]
+    if use_gpus:
+        docker_run_cmd.extend(["--runtime=nvidia", "--gpus", "all"])
+    docker_run_cmd.extend([image_tag, "tail", "-f", "/dev/null"])
+
+    try:
+        subprocess.run(docker_run_cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error starting live container: {e.stderr.decode()}")
+        raise typer.Exit(code=1)
+
+    try:
+        while True:
+            fix_cmd = typer.prompt(
+                "Enter a command to fix dependencies (e.g., 'pip install numpy'), or press Enter to re-run",
+                default="", show_default=False
+            )
+            if fix_cmd:
+                run_command_in_container(container_name, fix_cmd, workdir)
+            
+            print("--- Running Test ---")
+            run_command_in_container(container_name, run_command, workdir)
+            print("--- Test Finished ---")
+
+            if not typer.confirm("Do you want to try another fix?"):
+                break
+    finally:
+        print(f"Stopping and removing live container '{container_name}'...")
+        subprocess.run(["docker", "stop", container_name], check=False, capture_output=True)
+        subprocess.run(["docker", "rm", container_name], check=False, capture_output=True)
+
+    print("\n[bold yellow]Reminder:[/bold yellow] The fixes you made were temporary.")
+    print("For a permanent fix, please update your 'requirements.txt' and run the 'build' command.")
 
 if __name__ == "__main__":
     app()

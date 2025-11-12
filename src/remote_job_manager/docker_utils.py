@@ -46,6 +46,39 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_
         print(f"\nError running test command in Docker. Return code: {e.returncode}")
         raise typer.Exit(code=1)
 
+def run_command_in_container(container_name: str, command: str, workdir: str):
+    """
+    Runs a command inside a running Docker container.
+    """
+    print(f"Running command in container '{container_name}': {command}")
+    
+    docker_command = [
+        "docker", "exec",
+        "-w", workdir,
+        container_name,
+        "sh", "-c", command
+    ]
+
+    try:
+        process = subprocess.Popen(
+            docker_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for line in iter(process.stdout.readline, ''):
+            print(line, end='')
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, process.args)
+        print("\nCommand executed successfully.")
+    except FileNotFoundError:
+        print("Error: 'docker' command not found. Please ensure Docker is installed and in your PATH.")
+        raise typer.Exit(code=1)
+    except subprocess.CalledProcessError as e:
+        print(f"\nError running command in container. Return code: {e.returncode}")
+        raise typer.Exit(code=1)
+
 def list_images():
     """
     Lists all Docker images created by this tool.
