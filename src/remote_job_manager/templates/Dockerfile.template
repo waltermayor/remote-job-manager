@@ -30,12 +30,10 @@ WORKDIR /{{ project_name }}
 COPY . .
 
 # Instalar dependencias del proyecto con uv (usando requirements.txt)
-RUN if [ -f requirements.txt ]; then uv pip install -r requirements.txt; fi
+RUN if [ -f requirements.txt ]; then uv pip install --system -r requirements.txt; fi
 
 # Comando final para verificar GPU y CUDA desde Python
 CMD bash -c "\
     echo '=== NVIDIA-SMI ===' && nvidia-smi && \
     echo '\n=== Python version ===' && python --version && \
-    echo '\n=== PyTorch CUDA availability ===' && \
-    uv run python -c 'import torch; print(\"CUDA available:\", torch.cuda.is_available())' \
 "

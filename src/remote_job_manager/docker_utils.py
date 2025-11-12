@@ -12,7 +12,7 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_
 
     docker_command = ["docker", "run", "--rm"]
     if use_gpus:
-        docker_command.extend(["--gpus", "all"])
+        docker_command.extend(["--runtime=nvidia", "--gpus", "all"])
     
     # Get host user's UID and GID to run the container with the same user
     # This avoids permission issues with files created in the mounted volume
