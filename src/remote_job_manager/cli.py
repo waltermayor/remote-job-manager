@@ -8,6 +8,7 @@ from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
 from .docker_utils import run_test_in_container, list_images, run_command_in_container
+from .singularity_utils import convert_docker_to_singularity
 from .wandb_utils import add_wandb_volumes
 
 app = typer.Typer()
@@ -38,7 +39,7 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
         dataset_command = typer.prompt("Dataset download command (optional)", default="")
         run_command = typer.prompt("Test run command")
         use_gpus = typer.confirm("Enable GPU support for tests?")
-        print("Remember that the W&B config in the original repository should not have a hardcoded mode.")
+        print("Remember to log in to W&B on the host, and avoid hardcoding the mode in the repo config.")
         wandb_mode = typer.prompt("W&B mode (offline, online)", default="offline")
         config["test"] = {
             "repo_url": repo_url,
@@ -67,7 +68,7 @@ def configure(project_name: str = typer.Option(..., "--project-name", "-n", help
     dataset_command = typer.prompt("Dataset download command (optional)", default=config.get("test", {}).get("dataset_command", ""))
     run_command = typer.prompt("Test run command", default=config.get("test", {}).get("run_command", ""))
     use_gpus = typer.confirm("Enable GPU support for tests?", default=config.get("test", {}).get("gpus", False))
-    print("Remember that the W&B config in the original repository should not have a hardcoded mode.")
+    print("Remember to log in to W&B on the host, and avoid hardcoding the mode in the repo config.")
     wandb_mode = typer.prompt("W&B mode (offline, online)", default=config.get("test", {}).get("wandb_mode", "offline"))
 
     config["test"] = {
@@ -123,14 +124,16 @@ def build(
 
 @app.command()
 def convert(
-    image_name: str,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
 ):
     """
-    Convert a Docker image to Singularity format.
+    Convert the project's Docker image to Singularity format.
     """
     ensure_project_initialized(project_name)
-    print(f"Converting image: {image_name} for project: {project_name}")
+    image_name = f"{project_name}:latest"
+    output_dir = Path("output") / project_name
+    
+    convert_docker_to_singularity(image_name, output_dir)
 
 @app.command()
 def submit(

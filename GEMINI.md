@@ -38,6 +38,7 @@ remote-job-manager/
         ├── docker_builder.py # Logic for building Docker images
         ├── docker_utils.py # Docker-related utility functions
         ├── singularity_converter.py # Logic for Docker-to-Singularity conversion
+        ├── singularity_utils.py # Singularity-related utility functions
         ├── slurm_submitter.py # Logic for generating and submitting SLURM scripts
         ├── templates/
         │   └── Dockerfile.template
@@ -98,7 +99,7 @@ CMD ["python", "app.py"]
 5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with GPU support (using the NVIDIA Container Runtime), placeholder replacement, and correct file permissions.
 6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by the tool.
 7.  [x] **Implement Interactive Fix and Rerun:** Implement the `fix-and-rerun` command to provide a robust, interactive session for debugging dependencies that does not exit on errors.
-8.  [ ] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
+8.  [x] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
 9.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
 10. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
 11. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
@@ -147,6 +148,10 @@ job-manager <command> [options]
 *   **Test a container image:**
     ```bash
     job-manager test --project-name my-new-project
+    ```
+*   **Convert a Docker image to Singularity:**
+    ```bash
+    job-manager convert --project-name my-new-project
     ```
 *   **List container images created by this tool:**
     ```bash
