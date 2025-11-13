@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 from rich import print
 import typer
+import os
 
 def convert_docker_to_singularity(image_name: str, output_dir: Path):
     """
@@ -31,4 +32,47 @@ def convert_docker_to_singularity(image_name: str, output_dir: Path):
         raise typer.Exit(code=1)
     except subprocess.CalledProcessError as e:
         print(f"\nError converting Docker image to Singularity. Return code: {e.returncode}")
+        raise typer.Exit(code=1)
+
+def run_test_in_singularity(sif_path: Path, test_dir: Path, run_command: str, use_gpus: bool, wandb_mode: str, project_name: str):
+    """
+    Runs a test command inside a Singularity container.
+    """
+    print(f"Running test command in Singularity container: {sif_path}")
+
+    workdir = f"/{project_name}"
+    
+    singularity_command = ["singularity", "exec"]
+    if use_gpus:
+        singularity_command.append("--nv")
+    
+    singularity_command.extend([
+        "--bind", f"{test_dir.resolve()}:{workdir}",
+        str(sif_path),
+        "sh", "-c", f"cd {workdir} && {run_command}"
+    ])
+
+    env = os.environ.copy()
+    if wandb_mode:
+        env[f"SINGULARITYENV_WANDB_MODE"] = wandb_mode
+
+    try:
+        process = subprocess.Popen(
+            singularity_command,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for line in iter(process.stdout.readline, ''):
+            print(line, end='')
+        process.wait()
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(process.returncode, process.args)
+        print("\nTest command executed successfully in Singularity.")
+    except FileNotFoundError:
+        print("Error: 'singularity' command not found. Please ensure Singularity is installed and in your PATH.")
+        raise typer.Exit(code=1)
+    except subprocess.CalledProcessError as e:
+        print(f"\nError running test command in Singularity. Return code: {e.returncode}")
         raise typer.Exit(code=1)

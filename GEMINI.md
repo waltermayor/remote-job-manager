@@ -100,12 +100,13 @@ CMD ["python", "app.py"]
 6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by the tool.
 7.  [x] **Implement Interactive Fix and Rerun:** Implement the `fix-and-rerun` command to provide a robust, interactive session for debugging dependencies that does not exit on errors.
 8.  [x] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
-9.  [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-10. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-11. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-12. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-13. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-14. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+9.  [x] **Implement Singularity Tester:** Implement the `test-singularity` command to run the test configuration inside a converted Singularity image.
+10. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+11. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+12. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+13. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+14. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+15. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
 ## 5. How to Run CLI Commands
 
@@ -152,6 +153,10 @@ job-manager <command> [options]
 *   **Convert a Docker image to Singularity:**
     ```bash
     job-manager convert --project-name my-new-project
+    ```
+*   **Test a Singularity image:**
+    ```bash
+    job-manager test-singularity --project-name my-new-project
     ```
 *   **List container images created by this tool:**
     ```bash

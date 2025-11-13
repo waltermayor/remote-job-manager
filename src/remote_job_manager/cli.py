@@ -8,7 +8,7 @@ from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
 from .docker_utils import run_test_in_container, list_images, run_command_in_container
-from .singularity_utils import convert_docker_to_singularity
+from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
 
 app = typer.Typer()
@@ -200,9 +200,7 @@ def test(
         raise typer.Exit(code=1)
 
     test_dir = Path("output") / project_name / "test"
-    if test_dir.exists():
-        shutil.rmtree(test_dir)
-    test_dir.mkdir()
+    test_dir.mkdir(parents=True, exist_ok=True)
 
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
@@ -212,6 +210,46 @@ def test(
 
     image_tag = f"{project_name}:latest"
     run_test_in_container(image_tag, test_dir, run_command, project_name, use_gpus, wandb_mode)
+
+@app.command(name="test-singularity")
+def test_singularity(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to test with Singularity."),
+):
+    """
+    Test a Singularity image using the project's test configuration.
+    """
+    ensure_project_initialized(project_name)
+    
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+
+    sif_path = Path("output") / project_name / f"{project_name}.sif"
+    if not sif_path.exists():
+        print(f"Error: Singularity image not found at {sif_path}. Please run 'convert' first.")
+        raise typer.Exit(code=1)
+
+    test_config = config.get("test", {})
+    repo_url = test_config.get("repo_url")
+    dataset_command = test_config.get("dataset_command")
+    run_command = test_config.get("run_command")
+    use_gpus = test_config.get("gpus", False)
+    wandb_mode = test_config.get("wandb_mode", "offline")
+
+    if not repo_url or not run_command:
+        print("Error: 'repo_url' and 'run_command' must be defined in the 'test' section of config.yaml.")
+        raise typer.Exit(code=1)
+
+    test_dir = Path("output") / project_name / "test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+
+    clone_repo(repo_url, test_dir)
+    download_dataset(dataset_command, test_dir)
+
+    run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
+
+    run_test_in_singularity(sif_path, test_dir, run_command, use_gpus, wandb_mode, project_name)
 
 @app.command(name="list-images")
 def list_images_command():
