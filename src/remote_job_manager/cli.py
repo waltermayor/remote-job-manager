@@ -207,7 +207,7 @@ def test(
     #run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
 
     image_tag = f"{project_name}:latest"
-    run_test_in_container(image_tag, test_dir, run_command, use_gpus, project_name, wandb_mode)
+    run_test_in_container(image_tag, test_dir, run_command, project_name, use_gpus, wandb_mode)
 
 @app.command(name="list-images")
 def list_images_command():

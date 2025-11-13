@@ -4,7 +4,7 @@ from rich import print
 import typer
 import os
 
-def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_gpus: bool = False, project_name:str, wandb_mode: str = "") -> None:
+def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, project_name:str, use_gpus: bool = False, wandb_mode: str = "offline") -> None:
     """
     Runs a test command inside a Docker container.
     """
@@ -24,7 +24,7 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_
         docker_command.extend(["-e", f"WANDB_MODE={wandb_mode}"])
 
     docker_command.extend([
-        "-v", f"{test_dir.resolve()}:f"/{project_name}",
+        "-v", f"{test_dir.resolve()}:/{project_name}",
         image_tag,
         "sh", "-c", f"cd /test && {run_command}"
     ])
@@ -49,7 +49,7 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_
         print(f"\nError running test command in Docker. Return code: {e.returncode}")
         raise typer.Exit(code=1)
 
-def run_command_in_container(container_name: str, command: str, workdir: str) -> int:
+def run_command_in_container(container_name: str, command: str, workdir: str) -> None:
     """
     Runs a command inside a running Docker container and returns the exit code.
     """
