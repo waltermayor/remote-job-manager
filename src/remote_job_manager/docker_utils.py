@@ -20,9 +20,7 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, proj
     gid = os.getgid()
     docker_command.extend(["-u", f"{uid}:{gid}"])
 
-    if wandb_mode:
-        docker_command.extend(["-e", f"WANDB_MODE={wandb_mode}"])
-
+    docker_command = add_wandb_volumes(docker_command, wandb_mode)
     docker_command.extend([
         "-v", f"{test_dir.resolve()}:/{project_name}",
         image_tag,

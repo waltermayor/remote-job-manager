@@ -8,6 +8,7 @@ from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
 from .docker_utils import run_test_in_container, list_images, run_command_in_container
+from .wandb_utils import add_wandb_volumes
 
 app = typer.Typer()
 
@@ -244,17 +245,12 @@ def fix_and_rerun(
     test_dir = Path("output") / project_name / "test"
     workdir = f"/{project_name}"
 
-    
-    
-    
-
     print(f"Starting a live container '{container_name}' for interactive testing...")
     docker_run_cmd = [
         "docker", "run", "-d", "--name", container_name,
         "-v", f"{test_dir.resolve()}:{workdir}",
     ]
-    if wandb_mode:
-        docker_run_cmd.extend(["-e", f"WANDB_MODE={wandb_mode}"])
+    docker_run_cmd = add_wandb_volumes(docker_run_cmd, wandb_mode)
     if use_gpus:
         docker_run_cmd.extend(["--runtime=nvidia", "--gpus", "all"])
     docker_run_cmd.extend([image_tag, "tail", "-f", "/dev/null"])
