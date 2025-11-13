@@ -56,6 +56,7 @@ test:
   run_command: |
     python main.py --data_dir=<YOUR_DATA_DIRECTORY>/unzipped_dataset
   gpus: true
+  wandb_mode: "offline"
 ```
 **Example `Dockerfile.template` with LABEL:**
 ```Dockerfile
@@ -90,8 +91,8 @@ CMD ["python", "app.py"]
 
 ### Future Tasks (Feature Implementation)
 
-1.  [x] **Implement Project Initialization:** Flesh out the `init` command to interactively create a structured `config.yaml` file for each project, with a conditional prompt for test and GPU information.
-2.  [x] **Implement Project Configuration:** Implement the `configure` command to allow users to update the project configuration, including GPU support.
+1.  [x] **Implement Project Initialization:** Flesh out the `init` command to interactively create a structured `config.yaml` file for each project, with a conditional prompt for test, GPU, and W&B information.
+2.  [x] **Implement Project Configuration:** Implement the `configure` command to allow users to update the project configuration, including GPU and W&B support.
 3.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile and an empty `requirements.txt` file from a template.
 4.  [x] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
 5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with GPU support (using the NVIDIA Container Runtime), placeholder replacement, and correct file permissions.

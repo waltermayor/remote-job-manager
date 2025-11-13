@@ -27,6 +27,7 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             "dataset_command": "",
             "run_command": "",
             "gpus": False,
+            "wandb_mode": "offline",
         }
     }
 
@@ -36,11 +37,14 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
         dataset_command = typer.prompt("Dataset download command (optional)", default="")
         run_command = typer.prompt("Test run command")
         use_gpus = typer.confirm("Enable GPU support for tests?")
+        print("Remember that the W&B config in the original repository should not have a hardcoded mode.")
+        wandb_mode = typer.prompt("W&B mode (offline, online)", default="offline")
         config["test"] = {
             "repo_url": repo_url,
             "dataset_command": dataset_command,
             "run_command": run_command,
             "gpus": use_gpus,
+            "wandb_mode": wandb_mode,
         }
 
     save_project_config(project_name, config)
@@ -62,12 +66,15 @@ def configure(project_name: str = typer.Option(..., "--project-name", "-n", help
     dataset_command = typer.prompt("Dataset download command (optional)", default=config.get("test", {}).get("dataset_command", ""))
     run_command = typer.prompt("Test run command", default=config.get("test", {}).get("run_command", ""))
     use_gpus = typer.confirm("Enable GPU support for tests?", default=config.get("test", {}).get("gpus", False))
+    print("Remember that the W&B config in the original repository should not have a hardcoded mode.")
+    wandb_mode = typer.prompt("W&B mode (offline, online)", default=config.get("test", {}).get("wandb_mode", "offline"))
 
     config["test"] = {
         "repo_url": repo_url,
         "dataset_command": dataset_command,
         "run_command": run_command,
         "gpus": use_gpus,
+        "wandb_mode": wandb_mode,
     }
 
     save_project_config(project_name, config)
@@ -181,6 +188,7 @@ def test(
     dataset_command = test_config.get("dataset_command")
     run_command = test_config.get("run_command")
     use_gpus = test_config.get("gpus", False)
+    wandb_mode = test_config.get("wandb_mode", "offline")
 
     if not repo_url or not run_command:
         print("Error: 'repo_url' and 'run_command' must be defined in the 'test' section of config.yaml.")
@@ -199,7 +207,7 @@ def test(
     #run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
 
     image_tag = f"{project_name}:latest"
-    run_test_in_container(image_tag, test_dir, run_command, use_gpus, project_name)
+    run_test_in_container(image_tag, test_dir, run_command, use_gpus, project_name, wandb_mode)
 
 @app.command(name="list-images")
 def list_images_command():
@@ -225,6 +233,7 @@ def fix_and_rerun(
     test_config = config.get("test", {})
     run_command = test_config.get("run_command")
     use_gpus = test_config.get("gpus", False)
+    wandb_mode = test_config.get("wandb_mode", "offline")
 
     if not run_command:
         print("Error: 'run_command' must be defined in the 'test' section of config.yaml.")
@@ -242,9 +251,10 @@ def fix_and_rerun(
     print(f"Starting a live container '{container_name}' for interactive testing...")
     docker_run_cmd = [
         "docker", "run", "-d", "--name", container_name,
-        "-e", "WANDB_MODE=offline",
         "-v", f"{test_dir.resolve()}:{workdir}",
     ]
+    if wandb_mode:
+        docker_run_cmd.extend(["-e", f"WANDB_MODE={wandb_mode}"])
     if use_gpus:
         docker_run_cmd.extend(["--runtime=nvidia", "--gpus", "all"])
     docker_run_cmd.extend([image_tag, "tail", "-f", "/dev/null"])
