@@ -4,7 +4,7 @@ from rich import print
 import typer
 import os
 
-def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_gpus: bool = False):
+def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_gpus: bool = False, project_name:str) -> None:
     """
     Runs a test command inside a Docker container.
     """
@@ -21,7 +21,8 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, use_
     docker_command.extend(["-u", f"{uid}:{gid}"])
 
     docker_command.extend([
-        "-v", f"{test_dir.resolve()}:/test",
+        "-v", f"{test_dir.resolve()}:f"/{project_name}",
+        "-e", "WANDB_MODE=online",   
         image_tag,
         "sh", "-c", f"cd /test && {run_command}"
     ])

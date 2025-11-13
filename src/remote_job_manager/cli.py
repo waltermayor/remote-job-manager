@@ -196,10 +196,10 @@ def test(
     download_dataset(dataset_command, test_dir)
 
     # Replace placeholder in run_command
-    run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
+    #run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
 
     image_tag = f"{project_name}:latest"
-    run_test_in_container(image_tag, test_dir, run_command, use_gpus)
+    run_test_in_container(image_tag, test_dir, run_command, use_gpus, project_name)
 
 @app.command(name="list-images")
 def list_images_command():
@@ -233,22 +233,16 @@ def fix_and_rerun(
     image_tag = f"{project_name}:latest"
     container_name = f"fix-container-{uuid.uuid4()}"
     test_dir = Path("output") / project_name / "test"
-    workdir = "/test"
+    workdir = f"/{project_name}"
 
-    # Initial setup from test command
-    if not test_dir.exists():
-        test_dir.mkdir(parents=True)
     
-    repo_url = test_config.get("repo_url")
-    dataset_command = test_config.get("dataset_command")
-    clone_repo(repo_url, test_dir)
-    download_dataset(dataset_command, test_dir)
     
-    run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
+    
 
     print(f"Starting a live container '{container_name}' for interactive testing...")
     docker_run_cmd = [
         "docker", "run", "-d", "--name", container_name,
+        "-e", "WANDB_MODE=offline",
         "-v", f"{test_dir.resolve()}:{workdir}",
     ]
     if use_gpus:

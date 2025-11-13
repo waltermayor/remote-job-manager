@@ -5,25 +5,19 @@ LABEL created_by="remote_job_manager"
 
 # Evitar prompts interactivos y desactivar W&B online
 ENV DEBIAN_FRONTEND=noninteractive
-ENV WANDB_MODE=offline
+ENV MUJOCO_GL=egl
 
-# Forzar wandb offline y crear carpeta accesible
-ENV WANDB_MODE=offline \
-    WANDB_DIR=/tmp/wandb \
-    WANDB_CONFIG_DIR=/tmp/wandb \
-    WANDB_CACHE_DIR=/tmp/wandb/cache \
-    WANDB_START_METHOD=thread \
-    WANDB_DISABLE_CODE=true \
-    WANDB_SILENT=true
-
-# Crear carpetas y asegurar permisos
-RUN mkdir -p /tmp/wandb && chmod -R 777 /tmp/wandb
-
-# Instalar Python 3.10 y utilidades base
+# ====== Instalar Python y herramientas básicas ======
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 python3-pip python3.10-venv curl ca-certificates git \
     && ln -sf /usr/bin/python3.10 /usr/bin/python \
     && pip3 install --upgrade pip \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ====== Instalar dependencias del sistema para MuJoCo y OpenGL ======
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-dev libglew-dev libglfw3 libglfw3-dev libosmesa6-dev \
+    libegl1 libxext6 libxrender1 libxrandr2 libxi6 libxxf86vm1 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Instalar uv
@@ -39,13 +33,15 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 WORKDIR /{{ project_name }}
 
 # Copiar los archivos del proyecto
-#COPY . .
+COPY requirements.txt /horizon-reduction/
 
 # Instalar dependencias del proyecto con uv (usando requirements.txt)
-RUN if [ -f requirements.txt ]; then uv pip install --system -r requirements.txt; fi
+RUN if [ -f requirements.txt ]; then \
+    uv pip install --python /usr/bin/python -r requirements.txt; \
+fi
 
 # Comando final para verificar GPU y CUDA desde Python
 CMD bash -c "\
-    echo '=== NVIDIA-SMI ===' && nvidia-smi && \
-    echo '\n=== Python version ===' && python --version && \
-"
+    echo '=== NVIDIA-SMI ==='; nvidia-smi; \
+    echo '\n=== Python version ==='; python --version; \
+    echo '\n=== Python packages ==='; pip list"
