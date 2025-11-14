@@ -36,20 +36,26 @@ def convert_docker_to_singularity(image_name: str, output_dir: Path):
 
 def run_test_in_singularity(sif_path: Path, test_dir: Path, run_command: str, use_gpus: bool, wandb_mode: str, project_name: str):
     """
-    Runs a test command inside a Singularity container.
+    Runs a test command inside a Singularity container using a copy-on-write strategy.
     """
     print(f"Running test command in Singularity container: {sif_path}")
 
-    workdir = f"/{project_name}"
-    
-    singularity_command = ["singularity", "exec"]
+    singularity_command = ["singularity", "exec", "--writable-tmpfs"]
     if use_gpus:
         singularity_command.append("--nv")
     
+    # The command to run inside the container
+    exec_command = (
+        "mkdir -p /tmp/work && "
+        "cp -r /src/. /tmp/work/ && "
+        "cd /tmp/work && "
+        f"{run_command}"
+    )
+
     singularity_command.extend([
-        "--bind", f"{test_dir.resolve()}:{workdir}",
+        "--bind", f"{test_dir.resolve()}:/src:ro",
         str(sif_path),
-        "sh", "-c", f"cd {workdir} && {run_command}"
+        "sh", "-c", exec_command
     ])
 
     env = os.environ.copy()
