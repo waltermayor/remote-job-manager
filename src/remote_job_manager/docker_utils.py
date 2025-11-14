@@ -3,6 +3,7 @@ from pathlib import Path
 from rich import print
 import typer
 import os
+from .wandb_utils import add_wandb_volumes
 
 def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, project_name:str, use_gpus: bool = False, wandb_mode: str = "offline") -> None:
     """
@@ -24,7 +25,7 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, proj
     docker_command.extend([
         "-v", f"{test_dir.resolve()}:/{project_name}",
         image_tag,
-        "sh", "-c", f"cd /test && {run_command}"
+        "sh", "-c", run_command
     ])
 
     try:

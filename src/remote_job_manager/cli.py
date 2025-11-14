@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import shutil
 import uuid
+import os
 from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
@@ -287,8 +288,13 @@ def fix_and_rerun(
     workdir = f"/{project_name}"
 
     print(f"Starting a live container '{container_name}' for interactive testing...")
+    
+    uid = os.getuid()
+    gid = os.getgid()
+    
     docker_run_cmd = [
         "docker", "run", "-d", "--name", container_name,
+        "-u", f"{uid}:{gid}",
         "-v", f"{test_dir.resolve()}:{workdir}",
     ]
     docker_run_cmd = add_wandb_volumes(docker_run_cmd, wandb_mode)
