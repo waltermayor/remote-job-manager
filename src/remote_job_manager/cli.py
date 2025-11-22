@@ -87,6 +87,16 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
                 "user": remote_user,
                 "port": int(remote_port),
             }
+
+            if typer.confirm("Do you want to add initial commands for this remote?"):
+                init_commands = []
+                print("Enter initial commands one by one (press Enter on an empty line to finish):")
+                while True:
+                    command = typer.prompt("", default="", show_default=False)
+                    if not command:
+                        break
+                    init_commands.append(command)
+                config["remotes"][remote_name]["init_commands"] = init_commands
             
             if not typer.confirm("Do you want to add another remote?"):
                 break
@@ -139,6 +149,10 @@ def configure(
             else:
                 for name, details in config["remotes"].items():
                     print(f"  - [bold cyan]{name}[/bold cyan]: {details['user']}@{details['host']}:{details['port']}")
+                    if "init_commands" in details:
+                        print("    [italic]Initial commands:[/italic]")
+                        for cmd in details["init_commands"]:
+                            print(f"      - {cmd}")
             
             action = typer.prompt("\n[A]dd, [U]pdate, [R]emove, or [F]inish?", default="F").upper()
 
@@ -151,6 +165,17 @@ def configure(
                 remote_user = typer.prompt("Remote user")
                 remote_port = typer.prompt("Remote port", default="22")
                 config["remotes"][remote_name] = {"host": remote_host, "user": remote_user, "port": int(remote_port)}
+                
+                if typer.confirm("Do you want to add initial commands for this remote?"):
+                    init_commands = []
+                    print("Enter initial commands one by one (press Enter on an empty line to finish):")
+                    while True:
+                        command = typer.prompt("", default="", show_default=False)
+                        if not command:
+                            break
+                        init_commands.append(command)
+                    config["remotes"][remote_name]["init_commands"] = init_commands
+
                 print(f"Remote '{remote_name}' added.")
 
             elif action == "U":
@@ -162,6 +187,18 @@ def configure(
                     remote_user = typer.prompt("Remote user", default=current["user"])
                     remote_port = typer.prompt("Remote port", default=str(current["port"]))
                     config["remotes"][remote_name] = {"host": remote_host, "user": remote_user, "port": int(remote_port)}
+
+                    if typer.confirm("Do you want to update the initial commands for this remote?"):
+                        init_commands = []
+                        print("Current initial commands:", current.get("init_commands", "None"))
+                        print("Enter new initial commands one by one (press Enter on an empty line to finish):")
+                        while True:
+                            command = typer.prompt("", default="", show_default=False)
+                            if not command:
+                                break
+                            init_commands.append(command)
+                        config["remotes"][remote_name]["init_commands"] = init_commands
+
                     print(f"Remote '{remote_name}' updated.")
                 else:
                     print(f"Error: Remote '{remote_name}' not found.")

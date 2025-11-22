@@ -10,6 +10,10 @@ def run_remote_command(remote_config: dict, command: str):
     host = remote_config["host"]
     user = remote_config["user"]
     port = remote_config["port"]
+    init_commands = remote_config.get("init_commands", [])
+
+    if init_commands:
+        command = " && ".join(init_commands) + " && " + command
 
     ssh_command = [
         "ssh",
