@@ -58,22 +58,22 @@ def sync_project_to_remote(remote_config: dict, project_name: str):
         print(f"Warning: Local project directory {local_project_dir} not found. Nothing to sync.")
         return
 
-    remote_workspace = remote_config.get("workspace_dir", f"~/remote-job-manager-workspace")
-    remote_dest = f"{user}@{host}:{remote_workspace}/output/"
+    remote_base_path = remote_config.get("remote_base_path", str(Path.home()))
+    remote_dest = f"{user}@{host}:{remote_base_path}/"
 
     # Ensure the destination directory exists on the remote
-    setup_command = f"mkdir -p {remote_workspace}/output"
+    setup_command = f"mkdir -p {remote_base_path}"
     run_remote_command(remote_config, setup_command)
 
     rsync_command = [
         "rsync",
         "-avz",
         "-e", f"ssh -p {port} -o StrictHostKeyChecking=no",
-        str(local_project_dir),
-        remote_dest,
+        f"{local_project_dir}/",
+        f"{user}@{host}:{remote_base_path}/{project_name}/",
     ]
 
-    print(f"Syncing project '{project_name}' to remote '{host}'...")
+    print(f"Syncing project '{project_name}' to remote '{host}' at '{remote_base_path}'...")
     try:
         subprocess.run(rsync_command, check=True, capture_output=True, text=True)
         print("Sync completed successfully.")
@@ -83,3 +83,87 @@ def sync_project_to_remote(remote_config: dict, project_name: str):
     except subprocess.CalledProcessError as e:
         print(f"Error syncing project to remote. Return code: {e.returncode}\n{e.stderr}")
         raise typer.Exit(code=1)
+
+def prepare_remote_test_env(remote_config: dict, project_name: str, project_config: dict):
+
+    """
+
+    Prepares the test environment on a remote server.
+
+    """
+
+    remote_base_path = remote_config.get("remote_base_path", "~/remote-job-manager-workspace")
+
+    project_dir = f"{remote_base_path}/{project_name}"
+
+    test_dir = f"{project_dir}/test"
+
+    sif_path = f"{project_dir}/{project_name}.sif"
+
+    
+
+    repo_url = project_config["test"]["repo_url"]
+
+    dataset_command = project_config["test"]["dataset_command"]
+
+
+
+    # Construct the remote command
+
+    command = f"""
+
+    set -e
+
+    echo "---- Preparing remote test environment for {project_name} ----"
+
+    
+
+    echo "Checking for Singularity image..."
+
+    if [ ! -f {sif_path} ]; then
+
+        echo "Error: Singularity image not found at {sif_path} on remote."
+
+        exit 1
+
+    fi
+
+    
+
+    echo "Creating test directory..."
+
+    rm -rf {test_dir}
+
+    mkdir -p {test_dir}
+
+    
+
+    echo "Copying Singularity image..."
+
+    cp {sif_path} {test_dir}/
+
+    
+
+    cd {test_dir}
+
+    
+
+    echo "Cloning repository..."
+
+    git clone {repo_url}
+
+    
+
+    echo "Downloading dataset..."
+
+    {dataset_command}
+
+    
+
+    echo "---- Remote test environment setup complete ----"
+
+    """
+
+    
+
+    run_remote_command(remote_config, command)

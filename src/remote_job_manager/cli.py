@@ -30,8 +30,11 @@ def dispatch_to_remote_if_needed(ctx: typer.Context, remote: str, project_name: 
     
     remote_config = config["remotes"][remote]
     
+    remote_base_path = remote_config.get("remote_base_path", "~/remote-job-manager-workspace")
+    remote_project_dir = f"{remote_base_path}/{project_name}"
+
     # Reconstruct the command string to be run remotely.
-    command_str = f"job-manager {ctx.invoked_subcommand} --project-name {project_name}"
+    command_str = f"cd {remote_project_dir} && job-manager {ctx.invoked_subcommand} --project-name {project_name}"
 
     print(f"Dispatching command to remote '{remote}'...")
     remote_manager.sync_project_to_remote(remote_config, project_name)
@@ -81,11 +84,13 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             remote_host = typer.prompt("Remote host address")
             remote_user = typer.prompt("Remote user")
             remote_port = typer.prompt("Remote port", default="22")
+            remote_base_path = typer.prompt("Remote base path", default="~/remote-job-manager-workspace")
             
             config["remotes"][remote_name] = {
                 "host": remote_host,
                 "user": remote_user,
                 "port": int(remote_port),
+                "remote_base_path": remote_base_path,
             }
 
             if typer.confirm("Do you want to add initial commands for this remote?"):
@@ -149,6 +154,7 @@ def configure(
             else:
                 for name, details in config["remotes"].items():
                     print(f"  - [bold cyan]{name}[/bold cyan]: {details['user']}@{details['host']}:{details['port']}")
+                    print(f"    Remote Path: {details.get('remote_base_path', '~/remote-job-manager-workspace')}")
                     if "init_commands" in details:
                         print("    [italic]Initial commands:[/italic]")
                         for cmd in details["init_commands"]:
@@ -164,7 +170,13 @@ def configure(
                 remote_host = typer.prompt("Remote host address")
                 remote_user = typer.prompt("Remote user")
                 remote_port = typer.prompt("Remote port", default="22")
-                config["remotes"][remote_name] = {"host": remote_host, "user": remote_user, "port": int(remote_port)}
+                remote_base_path = typer.prompt("Remote base path", default="~/remote-job-manager-workspace")
+                config["remotes"][remote_name] = {
+                    "host": remote_host, 
+                    "user": remote_user, 
+                    "port": int(remote_port),
+                    "remote_base_path": remote_base_path,
+                }
                 
                 if typer.confirm("Do you want to add initial commands for this remote?"):
                     init_commands = []
@@ -186,7 +198,13 @@ def configure(
                     remote_host = typer.prompt("Remote host address", default=current["host"])
                     remote_user = typer.prompt("Remote user", default=current["user"])
                     remote_port = typer.prompt("Remote port", default=str(current["port"]))
-                    config["remotes"][remote_name] = {"host": remote_host, "user": remote_user, "port": int(remote_port)}
+                    remote_base_path = typer.prompt("Remote base path", default=current.get("remote_base_path", "~/remote-job-manager-workspace"))
+                    config["remotes"][remote_name] = {
+                        "host": remote_host, 
+                        "user": remote_user, 
+                        "port": int(remote_port),
+                        "remote_base_path": remote_base_path,
+                    }
 
                     if typer.confirm("Do you want to update the initial commands for this remote?"):
                         init_commands = []
@@ -490,6 +508,27 @@ def fix_and_rerun(
 
     print("\n[bold yellow]Reminder:[/bold yellow] The fixes you made were temporary.")
     print("For a permanent fix, please update your 'requirements.txt' and run the 'build' command.")
+
+@app.command(name="setup-remote-test-env")
+def setup_remote_test_env(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    remote: str = typer.Option(..., "--remote", "-r", help="The name of the remote server to set up."),
+):
+    """
+    Prepare the test environment on a remote server.
+    """
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+
+    if "remotes" not in config or remote not in config["remotes"]:
+        print(f"Error: Remote '{remote}' not configured for project '{project_name}'.")
+        raise typer.Exit(code=1)
+    
+    remote_config = config["remotes"][remote]
+    
+    remote_manager.prepare_remote_test_env(remote_config, project_name, config)
 
 if __name__ == "__main__":
     app()
