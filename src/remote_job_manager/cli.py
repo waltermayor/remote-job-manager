@@ -11,8 +11,32 @@ from .web_utils import clone_repo, download_dataset
 from .docker_utils import run_test_in_container, list_images, run_command_in_container
 from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
+from . import remote as remote_manager
 
 app = typer.Typer()
+
+def dispatch_to_remote_if_needed(ctx: typer.Context, remote: str, project_name: str):
+    """
+    If a remote is specified, syncs the project and runs the command there.
+    Then exits the local execution.
+    """
+    if not remote:
+        return
+
+    config = load_project_config(project_name)
+    if "remotes" not in config or remote not in config["remotes"]:
+        print(f"Error: Remote '{remote}' not configured for project '{project_name}'.")
+        raise typer.Exit(code=1)
+    
+    remote_config = config["remotes"][remote]
+    
+    # Reconstruct the command string to be run remotely.
+    command_str = f"job-manager {ctx.invoked_subcommand} --project-name {project_name}"
+
+    print(f"Dispatching command to remote '{remote}'...")
+    remote_manager.sync_project_to_remote(remote_config, project_name)
+    remote_manager.run_remote_command(remote_config, command_str)
+    raise typer.Exit()
 
 @app.command()
 def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to initialize.")):
@@ -31,7 +55,8 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             "run_command": "",
             "gpus": False,
             "wandb_mode": "offline",
-        }
+        },
+        "remotes": {}
     }
 
     if typer.confirm("Do you want to configure the test information now?"):
@@ -50,48 +75,120 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             "wandb_mode": wandb_mode,
         }
 
+    if typer.confirm("Do you want to configure a remote server for this project?"):
+        while True:
+            remote_name = typer.prompt("Enter a name for the remote (e.g., 'my-cluster')")
+            remote_host = typer.prompt("Remote host address")
+            remote_user = typer.prompt("Remote user")
+            remote_port = typer.prompt("Remote port", default="22")
+            
+            config["remotes"][remote_name] = {
+                "host": remote_host,
+                "user": remote_user,
+                "port": int(remote_port),
+            }
+            
+            if not typer.confirm("Do you want to add another remote?"):
+                break
+
     save_project_config(project_name, config)
     print(f"Project '{project_name}' initialized successfully.")
 
 @app.command()
-def configure(project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to configure.")):
+def configure(
+    ctx: typer.Context,
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to configure."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
+):
     """
     Configure the test information for an existing project.
     """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
     config = load_project_config(project_name)
     if not config:
         print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
         raise typer.Exit(code=1)
 
-    print("Please provide the new test information (press Enter to keep the current value):")
-    
-    repo_url = typer.prompt("Git repository URL", default=config.get("test", {}).get("repo_url", ""))
-    dataset_command = typer.prompt("Dataset download command (optional)", default=config.get("test", {}).get("dataset_command", ""))
-    run_command = typer.prompt("Test run command", default=config.get("test", {}).get("run_command", ""))
-    use_gpus = typer.confirm("Enable GPU support for tests?", default=config.get("test", {}).get("gpus", False))
-    print("Remember to log in to W&B on the host, and avoid hardcoding the mode in the repo config.")
-    wandb_mode = typer.prompt("W&B mode (offline, online)", default=config.get("test", {}).get("wandb_mode", "offline"))
+    if 'remotes' not in config:
+        config['remotes'] = {}
 
-    config["test"] = {
-        "repo_url": repo_url,
-        "dataset_command": dataset_command,
-        "run_command": run_command,
-        "gpus": use_gpus,
-        "wandb_mode": wandb_mode,
-    }
+    if typer.confirm("Do you want to configure the test information?"):
+        print("Please provide the new test information (press Enter to keep the current value):")
+        
+        repo_url = typer.prompt("Git repository URL", default=config.get("test", {}).get("repo_url", ""))
+        dataset_command = typer.prompt("Dataset download command (optional)", default=config.get("test", {}).get("dataset_command", ""))
+        run_command = typer.prompt("Test run command", default=config.get("test", {}).get("run_command", ""))
+        use_gpus = typer.confirm("Enable GPU support for tests?", default=config.get("test", {}).get("gpus", False))
+        print("Remember to log in to W&B on the host, and avoid hardcoding the mode in the repo config.")
+        wandb_mode = typer.prompt("W&B mode (offline, online)", default=config.get("test", {}).get("wandb_mode", "offline"))
+
+        config["test"] = {
+            "repo_url": repo_url,
+            "dataset_command": dataset_command,
+            "run_command": run_command,
+            "gpus": use_gpus,
+            "wandb_mode": wandb_mode,
+        }
+
+    if typer.confirm("Do you want to manage remote configurations?"):
+        while True:
+            print("\n[bold]Current Remotes:[/bold]")
+            if not config["remotes"]:
+                print("  No remotes configured.")
+            else:
+                for name, details in config["remotes"].items():
+                    print(f"  - [bold cyan]{name}[/bold cyan]: {details['user']}@{details['host']}:{details['port']}")
+            
+            action = typer.prompt("\n[A]dd, [U]pdate, [R]emove, or [F]inish?", default="F").upper()
+
+            if action == "F":
+                break
+            
+            if action == "A":
+                remote_name = typer.prompt("Enter a name for the new remote")
+                remote_host = typer.prompt("Remote host address")
+                remote_user = typer.prompt("Remote user")
+                remote_port = typer.prompt("Remote port", default="22")
+                config["remotes"][remote_name] = {"host": remote_host, "user": remote_user, "port": int(remote_port)}
+                print(f"Remote '{remote_name}' added.")
+
+            elif action == "U":
+                remote_name = typer.prompt("Enter the name of the remote to update")
+                if remote_name in config["remotes"]:
+                    print("Enter new values (press Enter to keep current):")
+                    current = config["remotes"][remote_name]
+                    remote_host = typer.prompt("Remote host address", default=current["host"])
+                    remote_user = typer.prompt("Remote user", default=current["user"])
+                    remote_port = typer.prompt("Remote port", default=str(current["port"]))
+                    config["remotes"][remote_name] = {"host": remote_host, "user": remote_user, "port": int(remote_port)}
+                    print(f"Remote '{remote_name}' updated.")
+                else:
+                    print(f"Error: Remote '{remote_name}' not found.")
+
+            elif action == "R":
+                remote_name = typer.prompt("Enter the name of the remote to remove")
+                if remote_name in config["remotes"]:
+                    del config["remotes"][remote_name]
+                    print(f"Remote '{remote_name}' removed.")
+                else:
+                    print(f"Error: Remote '{remote_name}' not found.")
 
     save_project_config(project_name, config)
     print(f"Configuration for project '{project_name}' updated successfully.")
 
 @app.command()
 def build(
+    ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
     Build a Docker image from the Dockerfile in the project's output directory.
     """
-    ensure_project_initialized(project_name)
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
     
+    ensure_project_initialized(project_name)
     project_dir = Path("output") / project_name
     dockerfile_path = project_dir / "Dockerfile"
     image_tag = f"{project_name}:latest"
@@ -125,11 +222,15 @@ def build(
 
 @app.command()
 def convert(
+    ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
     Convert the project's Docker image to Singularity format.
     """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
     ensure_project_initialized(project_name)
     image_name = f"{project_name}:latest"
     output_dir = Path("output") / project_name
@@ -150,11 +251,15 @@ def submit(
 
 @app.command()
 def template(
+    ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to create the Dockerfile for."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
     Create a new Dockerfile and an empty requirements.txt file from a template for a Python project.
     """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
     ensure_project_initialized(project_name)
     template_path = Path(__file__).parent / "templates" / "Dockerfile.template"
     with open(template_path, "r") as f:
@@ -176,13 +281,16 @@ def template(
 
 @app.command()
 def test(
+    ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to test."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
     Test a Docker image by cloning a repository, downloading a dataset, and running a command from the project's config.yaml.
     """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
     ensure_project_initialized(project_name)
-    
     config = load_project_config(project_name)
     if not config:
         print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
@@ -206,21 +314,21 @@ def test(
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
 
-    # Replace placeholder in run_command
-    #run_command = run_command.replace("<YOUR_DATA_DIRECTORY>", str(test_dir.resolve()))
-
     image_tag = f"{project_name}:latest"
     run_test_in_container(image_tag, test_dir, run_command, project_name, use_gpus, wandb_mode)
 
 @app.command(name="test-singularity")
 def test_singularity(
+    ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to test with Singularity."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
     Test a Singularity image using the project's test configuration.
     """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
     ensure_project_initialized(project_name)
-    
     config = load_project_config(project_name)
     if not config:
         print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
@@ -253,21 +361,33 @@ def test_singularity(
     run_test_in_singularity(sif_path, test_dir, run_command, use_gpus, wandb_mode, project_name)
 
 @app.command(name="list-images")
-def list_images_command():
+def list_images_command(
+    ctx: typer.Context,
+    project_name: str = typer.Option(None, "--project-name", "-n", help="The project context (needed for remote execution)."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
+):
     """
     List all Docker images created by this tool.
     """
+    if remote and not project_name:
+        print("Error: --project-name is required when using --remote for this command.")
+        raise typer.Exit(code=1)
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+    
     list_images()
 
 @app.command(name="fix-and-rerun")
 def fix_and_rerun(
+    ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project to fix and rerun."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
     Interactively fix a project's dependencies and re-run the test.
     """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
     ensure_project_initialized(project_name)
-    
     config = load_project_config(project_name)
     if not config:
         print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")

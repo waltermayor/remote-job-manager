@@ -37,6 +37,7 @@ remote-job-manager/
         ├── config.py       # Configuration loading and validation
         ├── docker_builder.py # Logic for building Docker images
         ├── docker_utils.py # Docker-related utility functions
+        ├── remote.py       # Logic for remote execution via SSH/rsync
         ├── singularity_converter.py # Logic for Docker-to-Singularity conversion
         ├── singularity_utils.py # Singularity-related utility functions
         ├── slurm_submitter.py # Logic for generating and submitting SLURM scripts
@@ -58,6 +59,11 @@ test:
     python main.py --data_dir=<YOUR_DATA_DIRECTORY>/unzipped_dataset
   gpus: true
   wandb_mode: "offline"
+remotes:
+  my-cluster:
+    host: login.server.mila.quebec
+    user: mayorw
+    port: 2222
 ```
 **Example `Dockerfile.template` with LABEL:**
 ```Dockerfile
@@ -101,14 +107,50 @@ CMD ["python", "app.py"]
 7.  [x] **Implement Interactive Fix and Rerun:** Implement the `fix-and-rerun` command to provide a robust, interactive session for debugging dependencies that does not exit on errors.
 8.  [x] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
 9.  [x] **Implement Singularity Tester:** Implement the `test-singularity` command to run the test configuration inside a converted Singularity image.
-10. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-11. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-12. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-13. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-14. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-15. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+10. [x] **Implement Remote Execution:** Add the ability to execute commands on remote servers via SSH, with project-specific remote configurations managed in `config.yaml`.
+11. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+12. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+13. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+14. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+15. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+16. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
-## 5. How to Run CLI Commands
+## 5. Remote Execution
+
+The `job-manager` tool now supports executing commands on remote servers via SSH. This allows you to manage your containerized experiments on HPC clusters or other remote machines directly from your local workstation.
+
+### How it Works
+
+1.  **Configuration:** Remote server details (hostname, username, port) are configured within your project's `config.yaml` file. This makes remote configurations project-specific and version-controllable.
+2.  **File Synchronization:** When you execute a remote command, the local `output/<project_name>` directory is automatically synchronized with a corresponding directory on the remote server using `rsync`. This ensures that your remote `job-manager` instance has access to the latest project files (e.g., Dockerfiles, `config.yaml`, cloned repositories).
+3.  **Remote Command Dispatch:** The local `job-manager` then dispatches the requested command to the remote server via SSH. The remote server executes its own `job-manager` command, and the output is streamed back to your local terminal.
+
+### Configuring Remotes
+
+You can configure remotes when initializing a new project (`job-manager init`) or by using the `job-manager configure` command for an existing project.
+
+**Example `config.yaml` with remotes:**
+
+```yaml
+general:
+  project_name: my-project
+# ... other configurations ...
+remotes:
+  my-cluster:
+    host: login.server.mila.quebec
+    user: mayorw
+    port: 2222
+  dev-server:
+    host: dev.example.com
+    user: myuser
+    port: 22
+```
+
+### Using the `--remote` Flag
+
+To execute any command on a remote server, simply add the `--remote <remote_name>` flag, where `<remote_name>` is the name you configured in your project's `config.yaml`.
+
+## 6. How to Run CLI Commands
 
 To simplify the command-line invocation, you can install the project in editable mode. This will create a `job-manager` script in your environment, allowing you to run the commands directly.
 
@@ -152,7 +194,7 @@ job-manager <command> [options]
     ```
 *   **Convert a Docker image to Singularity:**
     ```bash
-    job-manager convert --project-name my-new-project
+    job-manager convert --project-name my-new-new-project
     ```
 *   **Test a Singularity image:**
     ```bash
@@ -165,6 +207,14 @@ job-manager <command> [options]
 *   **Interactively fix and rerun a test:**
     ```bash
     job-manager fix-and-rerun --project-name my-new-project
+    ```
+*   **Build a container image on a remote server:**
+    ```bash
+    job-manager build --project-name my-new-project --remote my-cluster
+    ```
+*   **Test a Singularity image on a remote server:**
+    ```bash
+    job-manager test-singularity --project-name my-new-project --remote my-cluster
     ```
 *   **Get help for a command:**
     ```bash

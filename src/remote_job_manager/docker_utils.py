@@ -28,6 +28,17 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, proj
         "sh", "-c", run_command
     ])
 
+    # Wandb-related error patterns to detect
+    wandb_error_patterns = [
+        "failed to get API key",
+        "Unable to verify login",
+        "netrc",
+        "permission denied",
+        "ERROR main: failed to get logger path"
+    ]
+
+    wandb_error_detected = False
+
     try:
         process = subprocess.Popen(
             docker_command,
@@ -35,12 +46,37 @@ def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, proj
             stderr=subprocess.STDOUT,
             text=True,
         )
+
         for line in iter(process.stdout.readline, ''):
+
+            # If first W&B error already triggered → stop printing logs
+            if wandb_error_detected:
+                continue
+
+            # Print normal logs until error appears
             print(line, end='')
+
+            # Detect error and stop logs
+            if any(pattern in line for pattern in wandb_error_patterns):
+
+                wandb_error_detected = True
+
+                print(
+                    "\033[91m\n"
+                    "⚠️  WARNING: W&B authentication failed inside the container.\n"
+                    "\033[93mRemember to log in to W&B on the host,\n"
+                    "and avoid hardcoding the mode in the repo config.\033[0m\n"
+                )
+
+                # Stop reading further logs but allow container to finish
+                break
+
         process.wait()
         if process.returncode != 0:
             raise subprocess.CalledProcessError(process.returncode, process.args)
-        print("\nTest command executed successfully.")
+        
+        if not wandb_error_detected:
+            print("\nTest command executed successfully.")
     except FileNotFoundError:
         print("Error: 'docker' command not found. Please ensure Docker is installed and in your PATH.")
         raise typer.Exit(code=1)
