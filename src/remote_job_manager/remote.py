@@ -59,10 +59,9 @@ def sync_project_to_remote(remote_config: dict, project_name: str):
         return
 
     remote_base_path = remote_config.get("remote_base_path", str(Path.home()))
-    remote_dest = f"{user}@{host}:{remote_base_path}/"
-
+    
     # Ensure the destination directory exists on the remote
-    setup_command = f"mkdir -p {remote_base_path}"
+    setup_command = f"mkdir -p {remote_base_path}/{project_name}"
     run_remote_command(remote_config, setup_command)
 
     rsync_command = [
@@ -84,86 +83,72 @@ def sync_project_to_remote(remote_config: dict, project_name: str):
         print(f"Error syncing project to remote. Return code: {e.returncode}\n{e.stderr}")
         raise typer.Exit(code=1)
 
+def sync_file_to_remote(remote_config: dict, local_file_path: Path, remote_dest_path: str):
+    """
+    Syncs a single local file to the remote server using rsync.
+    """
+    host = remote_config["host"]
+    user = remote_config["user"]
+    port = remote_config["port"]
+
+    if not local_file_path.is_file():
+        print(f"Error: Local file {local_file_path} not found.")
+        raise typer.Exit(code=1)
+
+    rsync_command = [
+        "rsync",
+        "-avz",
+        "-e", f"ssh -p {port} -o StrictHostKeyChecking=no",
+        str(local_file_path),
+        f"{user}@{host}:{remote_dest_path}/",
+    ]
+
+    print(f"Syncing file '{local_file_path.name}' to remote '{host}' at '{remote_dest_path}'...")
+    try:
+        subprocess.run(rsync_command, check=True, capture_output=True, text=True)
+        print("Sync completed successfully.")
+    except FileNotFoundError:
+        print("Error: 'rsync' command not found. Please ensure rsync is installed and in your PATH.")
+        raise typer.Exit(code=1)
+    except subprocess.CalledProcessError as e:
+        print(f"Error syncing file to remote. Return code: {e.returncode}\n{e.stderr}")
+        raise typer.Exit(code=1)
+
 def prepare_remote_test_env(remote_config: dict, project_name: str, project_config: dict):
-
     """
-
-    Prepares the test environment on a remote server.
-
+    Prepares the test environment on a remote server by syncing the SIF file
+    and then running setup commands on the remote.
     """
+    # Define local and remote paths
+    local_sif_path = Path(f"output/{project_name}/{project_name}.sif")
+    remote_base_path = remote_config.get("remote_base_path", str(Path.home()))
+    remote_project_dir = f"{remote_base_path}/{project_name}"
+    remote_test_dir = f"{remote_project_dir}/test"
 
-    remote_base_path = remote_config.get("remote_base_path", "~/remote-job-manager-workspace")
+    # Step 1: Create directories on remote
+    print("--- Creating directories on remote server ---")
+    command = f"mkdir -p {remote_test_dir}"
+    run_remote_command(remote_config, command)
 
-    project_dir = f"{remote_base_path}/{project_name}"
+    # Step 2: Copy .sif file from local to remote
+    print(f"--- Syncing Singularity image to {remote_project_dir} ---")
+    sync_file_to_remote(remote_config, local_sif_path, remote_project_dir)
 
-    test_dir = f"{project_dir}/test"
-
-    sif_path = f"{project_dir}/{project_name}.sif"
-
-    
-
+    # Step 3: Clone repo and download dataset on remote
+    print("--- Cloning repository and downloading dataset on remote ---")
     repo_url = project_config["test"]["repo_url"]
-
     dataset_command = project_config["test"]["dataset_command"]
-
-
-
-    # Construct the remote command
-
+    
     command = f"""
-
     set -e
-
-    echo "---- Preparing remote test environment for {project_name} ----"
-
+    cd {remote_test_dir}
     
-
-    echo "Checking for Singularity image..."
-
-    if [ ! -f {sif_path} ]; then
-
-        echo "Error: Singularity image not found at {sif_path} on remote."
-
-        exit 1
-
-    fi
-
-    
-
-    echo "Creating test directory..."
-
-    rm -rf {test_dir}
-
-    mkdir -p {test_dir}
-
-    
-
-    echo "Copying Singularity image..."
-
-    cp {sif_path} {test_dir}/
-
-    
-
-    cd {test_dir}
-
-    
-
     echo "Cloning repository..."
-
     git clone {repo_url}
-
     
-
     echo "Downloading dataset..."
-
     {dataset_command}
-
     
-
     echo "---- Remote test environment setup complete ----"
-
     """
-
-    
-
     run_remote_command(remote_config, command)
