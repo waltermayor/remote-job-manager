@@ -12,7 +12,7 @@ from .docker_utils import run_test_in_container, list_images, run_command_in_con
 from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
 from . import remote as remote_manager
-from .permissions import set_permissions_recursive
+from .permissions import create_project_dir, chown_to_sudo_user
 
 app = typer.Typer()
 
@@ -363,6 +363,7 @@ def test(
 
     test_dir = Path("output") / project_name / "test"
     create_project_dir(test_dir)
+    chown_to_sudo_user(test_dir)
 
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
@@ -405,6 +406,7 @@ def test_singularity(
 
     test_dir = Path("output") / project_name / "test"
     create_project_dir(test_dir)
+    chown_to_sudo_user(test_dir)
 
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
