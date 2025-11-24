@@ -12,6 +12,7 @@ from .docker_utils import run_test_in_container, list_images, run_command_in_con
 from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
 from . import remote as remote_manager
+from .permissions import set_permissions_recursive
 
 app = typer.Typer()
 
@@ -107,6 +108,8 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
                 break
 
     save_project_config(project_name, config)
+    project_dir = Path("output") / project_name
+    set_permissions_recursive(project_dir)
     print(f"Project '{project_name}' initialized successfully.")
 
 @app.command()
@@ -358,13 +361,8 @@ def test(
     use_gpus = test_config.get("gpus", False)
     wandb_mode = test_config.get("wandb_mode", "offline")
 
-    if not repo_url or not run_command:
-        print("Error: 'repo_url' and 'run_command' must be defined in the 'test' section of config.yaml.")
-        print("You can set them by running 'job-manager configure --project-name <project_name>'")
-        raise typer.Exit(code=1)
-
     test_dir = Path("output") / project_name / "test"
-    test_dir.mkdir(parents=True, exist_ok=True)
+    create_project_dir(test_dir)
 
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
@@ -406,7 +404,7 @@ def test_singularity(
         raise typer.Exit(code=1)
 
     test_dir = Path("output") / project_name / "test"
-    test_dir.mkdir(parents=True, exist_ok=True)
+    create_project_dir(test_dir)
 
     clone_repo(repo_url, test_dir)
     download_dataset(dataset_command, test_dir)
