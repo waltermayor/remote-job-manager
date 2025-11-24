@@ -3,6 +3,7 @@ from pathlib import Path
 from rich import print
 import typer
 import os
+import uuid
 from .wandb_utils import add_wandb_volumes
 
 def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, project_name:str, use_gpus: bool = False, wandb_mode: str = "offline") -> None:
@@ -132,3 +133,51 @@ def list_images():
     except subprocess.CalledProcessError as e:
         print(f"Error listing Docker images. Return code: {e.returncode}")
         raise typer.Exit(code=1)
+
+def interactive_shell(project_name: str, config: dict):
+    """
+    Starts an interactive shell in a new container for the given project,
+    and allows committing the changes to the image.
+    """
+    image_tag = f"{project_name}:latest"
+    container_name = f"interactive-shell-{uuid.uuid4()}"
+    
+    test_config = config.get("test", {})
+    use_gpus = test_config.get("gpus", False)
+    wandb_mode = test_config.get("wandb_mode", "offline")
+    
+    test_dir = Path("output") / project_name / "test"
+    workdir = f"/{project_name}"
+    
+    uid = os.getuid()
+    gid = os.getgid()
+
+    docker_run_cmd = [
+        "docker", "run", "-it", "--name", container_name,
+        "-u", f"{uid}:{gid}",
+        "-v", f"{test_dir.resolve()}:{workdir}",
+        "-w", workdir,
+    ]
+    docker_run_cmd = add_wandb_volumes(docker_run_cmd, wandb_mode)
+    if use_gpus:
+        docker_run_cmd.extend(["--runtime=nvidia", "--gpus", "all"])
+    docker_run_cmd.extend([image_tag, "/bin/bash"])
+
+    print(f"Starting interactive shell in a new container '{container_name}'...")
+    print("Exit the shell to save or discard changes.")
+    
+    try:
+        subprocess.run(docker_run_cmd, check=True)
+        
+        if typer.confirm(f"Do you want to save the changes to the image '{image_tag}'?"):
+            print(f"Committing changes to image '{image_tag}'...")
+            subprocess.run(["docker", "commit", container_name, image_tag], check=True)
+            print("Changes saved successfully.")
+        else:
+            print("Changes discarded.")
+            
+    except subprocess.CalledProcessError as e:
+        print(f"\nError during interactive session. Return code: {e.returncode}")
+    finally:
+        print(f"Removing container '{container_name}'...")
+        subprocess.run(["docker", "rm", container_name], check=False, capture_output=True)

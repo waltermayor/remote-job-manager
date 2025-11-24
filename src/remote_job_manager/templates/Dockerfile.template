@@ -33,7 +33,7 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 WORKDIR /{{ project_name }}
 
 # Copiar los archivos del proyecto
-COPY requirements.txt /horizon-reduction/
+COPY requirements.txt /{{ project_name }}/
 
 # Instalar dependencias del proyecto con uv (usando requirements.txt)
 RUN if [ -f requirements.txt ]; then \

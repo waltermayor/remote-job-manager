@@ -530,5 +530,25 @@ def setup_remote_test_env(
     
     remote_manager.prepare_remote_test_env(remote_config, project_name, config)
 
+@app.command()
+def shell(
+    ctx: typer.Context,
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
+):
+    """
+    Start an interactive shell inside the project's Docker container.
+    """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+    
+    ensure_project_initialized(project_name)
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+        
+    from .docker_utils import interactive_shell
+    interactive_shell(project_name, config)
+
 if __name__ == "__main__":
     app()
