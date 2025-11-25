@@ -12,7 +12,7 @@ from .docker_utils import run_test_in_container, list_images, run_command_in_con
 from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
 from . import remote as remote_manager
-from .permissions import create_project_dir, chown_to_sudo_user
+from .permissions import create_project_dir, chown_to_sudo_user,set_permissions_recursive
 
 app = typer.Typer()
 
@@ -258,9 +258,20 @@ def build(
     print(f"Building Docker image for project: {project_name}")
     print(f"Image tag: {image_tag}")
 
+    uid = os.getuid()
+    gid = os.getgid()
+    docker_cmd = [
+        "docker", "build",
+        "--build-arg", f"USER_ID={uid}",
+        "--build-arg", f"GROUP_ID={gid}",
+        "-t", image_tag,
+        "-f", str(dockerfile_path),
+        str(project_dir),
+    ]
+
     try:
         process = subprocess.Popen(
-            ["docker", "build", "-t", image_tag, "-f", str(dockerfile_path), str(project_dir)],
+            docker_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

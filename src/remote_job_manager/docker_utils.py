@@ -147,14 +147,10 @@ def interactive_shell(project_name: str, config: dict):
     wandb_mode = test_config.get("wandb_mode", "offline")
     
     test_dir = Path("output") / project_name / "test"
-    workdir = f"/{project_name}"
+    workdir = f"/home/devuser/{project_name}"  # devuser home
     
-    uid = os.getuid()
-    gid = os.getgid()
-
     docker_run_cmd = [
         "docker", "run", "-it", "--name", container_name,
-        "-u", f"{uid}:{gid}",
         "-v", f"{test_dir.resolve()}:{workdir}",
         "-w", workdir,
     ]
