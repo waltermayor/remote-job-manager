@@ -1,6 +1,5 @@
 from pathlib import Path
 from rich import print
-from .permissions import create_project_dir
 
 def ensure_project_initialized(project_name: str):
     """
@@ -10,5 +9,5 @@ def ensure_project_initialized(project_name: str):
     output_dir = Path("output") / project_name
     if not output_dir.exists():
         print(f"Project '{project_name}' not initialized. Creating output directory...")
-        create_project_dir(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
         print(f"Output directory created at: {output_dir}")

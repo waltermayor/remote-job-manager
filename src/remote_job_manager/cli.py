@@ -8,7 +8,7 @@ import os
 from .utils import ensure_project_initialized
 from .config import load_project_config, save_project_config
 from .web_utils import clone_repo, download_dataset
-from .docker_utils import run_test_in_container, list_images, run_command_in_container
+from .docker_utils import run_test_in_container, list_images, run_command_in_container, create_docker_template
 from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
 from . import remote as remote_manager
@@ -107,7 +107,15 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
                 break
 
     save_project_config(project_name, config)
-    project_dir = Path("output") / project_name
+    create_docker_template(project_name)
+
+    test_dir = Path("output") / project_name / "test"
+    test_dir.mkdir(parents=True, exist_ok=True)
+
+    test_config = config.get("test", {})
+    repo_url = test_config.get("repo_url")
+    clone_repo(repo_url, test_dir)
+
     print(f"Project '{project_name}' initialized successfully.")
 
 @app.command()

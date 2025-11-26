@@ -5,6 +5,7 @@ import typer
 import os
 import uuid
 from .wandb_utils import add_wandb_volumes
+from .utils import ensure_project_initialized
 
 def run_test_in_container(image_tag: str, test_dir: Path, run_command: str, project_name:str, use_gpus: bool = False, wandb_mode: str = "offline") -> None:
     """
@@ -177,3 +178,27 @@ def interactive_shell(project_name: str, config: dict):
     finally:
         print(f"Removing container '{container_name}'...")
         subprocess.run(["docker", "rm", container_name], check=False, capture_output=True)
+
+
+def create_docker_template( project_name: str ):
+    """
+    Create a new Dockerfile and an empty requirements.txt file from a template for a Python project.
+    """
+    ensure_project_initialized(project_name)
+    template_path = Path(__file__).parent / "templates" / "Dockerfile.template"
+    with open(template_path, "r") as f:
+        template_content = f.read()
+
+    dockerfile_content = template_content.replace("{{ project_name }}", project_name)
+
+    output_dir = Path("output") / project_name
+    dockerfile_path = output_dir / "Dockerfile"
+    requirements_path = output_dir / "requirements.txt"
+
+    with open(dockerfile_path, "w") as f:
+        f.write(dockerfile_content)
+
+    with open(requirements_path, "w") as f:
+        pass  # Create an empty file
+
+    print(f"Dockerfile and requirements.txt created successfully in: {output_dir}")
