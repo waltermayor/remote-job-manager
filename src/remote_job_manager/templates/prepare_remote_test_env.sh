@@ -7,7 +7,7 @@ cd {{remote_test_dir}}
 repo_name=$(basename {{repo_url}} .git)
 if [ ! -d "$repo_name" ]; then
     echo "Cloning repository..."
-    git clone {{repo_url}}
+    git clone {{repo_url}} .
 else
     echo "Repository '$repo_name' already exists, skipping clone."
 fi

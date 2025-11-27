@@ -135,7 +135,7 @@ def prepare_remote_test_env(remote_config: dict, project_name: str, project_conf
     dataset_command = project_config["test"]["dataset_command"]
     
     # Read the script template
-    script_path = Path(__file__).parent / "scripts" / "prepare_remote_test_env.sh"
+    script_path = Path(__file__).parent / "templates" / "prepare_remote_test_env.sh"
     with open(script_path, "r") as f:
         script_template = f.read()
         
