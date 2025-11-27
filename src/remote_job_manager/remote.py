@@ -117,7 +117,7 @@ def sync_file_to_remote(remote_config: dict, local_file_path: Path, remote_dest_
 def prepare_remote_test_env(remote_config: dict, project_name: str, project_config: dict):
     """
     Prepares the test environment on a remote server by syncing the SIF file
-    and then running setup commands on the remote.
+    and then running a setup script on the remote.
     """
     # Define local and remote paths
     local_sif_path = Path(f"output/{project_name}/{project_name}.sif")
@@ -125,30 +125,23 @@ def prepare_remote_test_env(remote_config: dict, project_name: str, project_conf
     remote_project_dir = f"{remote_base_path}/{project_name}"
     remote_test_dir = f"{remote_project_dir}/test"
 
-    # Step 1: Create directories on remote
-    print("--- Creating directories on remote server ---")
-    command = f"mkdir -p {remote_test_dir}"
-    run_remote_command(remote_config, command)
-
-    # Step 2: Copy .sif file from local to remote
+    # Step 1: Sync the .sif file from local to remote
     print(f"--- Syncing Singularity image to {remote_project_dir} ---")
     sync_file_to_remote(remote_config, local_sif_path, remote_project_dir)
 
-    # Step 3: Clone repo and download dataset on remote
-    print("--- Cloning repository and downloading dataset on remote ---")
+    # Step 2: Create dirs, clone repo, and download dataset on remote
+    print("--- Setting up test environment on remote ---")
     repo_url = project_config["test"]["repo_url"]
     dataset_command = project_config["test"]["dataset_command"]
     
-    command = f"""
-    set -e
-    cd {remote_test_dir}
+    # Read the script template
+    script_path = Path(__file__).parent / "scripts" / "prepare_remote_test_env.sh"
+    with open(script_path, "r") as f:
+        script_template = f.read()
+        
+    # Inject variables into the script
+    command = script_template.replace("{{remote_test_dir}}", remote_test_dir)
+    command = command.replace("{{repo_url}}", repo_url)
+    command = command.replace("{{dataset_command}}", dataset_command)
     
-    echo "Cloning repository..."
-    git clone {repo_url}
-    
-    echo "Downloading dataset..."
-    {dataset_command}
-    
-    echo "---- Remote test environment setup complete ----"
-    """
     run_remote_command(remote_config, command)

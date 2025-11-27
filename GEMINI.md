@@ -64,6 +64,8 @@ remotes:
     host: login.server.mila.quebec
     user: mayorw
     port: 2222
+    remote_base_path: ~/remote-job-manager-workspace
+
 ```
 **Example `Dockerfile.template` with LABEL:**
 ```Dockerfile
@@ -100,20 +102,22 @@ CMD ["python", "app.py"]
 
 1.  [x] **Implement Project Initialization:** Flesh out the `init` command to interactively create a structured `config.yaml` file for each project, with a conditional prompt for test, GPU, and W&B information.
 2.  [x] **Implement Project Configuration:** Implement the `configure` command to allow users to update the project configuration, including GPU and W&B support.
-3.  [ ] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile and an empty `requirements.txt` file from a template.
+3.  [x] **Implement Dockerfile Template Command:** Flesh out the `template` command in `cli.py` to generate a customizable Dockerfile and an empty `requirements.txt` file from a template.
 4.  [x] **Implement Docker Builder:** Flesh out `docker_builder.py` to execute `docker build` commands using the system's Docker daemon.
 5.  [x] **Implement Docker Tester:** Implement the `test` command, which uses utility functions to clone a repo, download a dataset, and run a test command with GPU support (using the NVIDIA Container Runtime).
-6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by the tool.
+6.  [x] **Implement Image Lister:** Implement the `list-images` command to list all Docker images created by this tool.
 7.  [x] **Implement Interactive Fix and Rerun:** Implement the `fix-and-rerun` command to provide a robust, interactive session for debugging dependencies that does not exit on errors.
 8.  [x] **Implement Singularity Converter:** Implement the logic in `singularity_converter.py` to pull a Docker image and build a Singularity image from it.
 9.  [x] **Implement Singularity Tester:** Implement the `test-singularity` command to run the test configuration inside a converted Singularity image.
 10. [x] **Implement Remote Execution:** Add the ability to execute commands on remote servers via SSH, with project-specific remote configurations managed in `config.yaml`.
-11. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-12. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-13. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-14. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-15. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-16. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+11. [x] **Implement `setup-remote-test-env` command:** A command to prepare a test environment on a remote server by copying files from the local host.
+12. [x] **Implement `shell` command:** A command to get an interactive shell inside a Docker container and persist changes.
+13. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+14. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+15. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+16. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+17. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+18. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
 ## 5. Remote Execution
 
@@ -121,8 +125,8 @@ The `job-manager` tool now supports executing commands on remote servers via SSH
 
 ### How it Works
 
-1.  **Configuration:** Remote server details (hostname, username, port) are configured within your project's `config.yaml` file. This makes remote configurations project-specific and version-controllable.
-2.  **File Synchronization:** When you execute a remote command, the local `output/<project_name>` directory is automatically synchronized with a corresponding directory on the remote server using `rsync`. This ensures that your remote `job-manager` instance has access to the latest project files (e.g., Dockerfiles, `config.yaml`, cloned repositories).
+1.  **Configuration:** Remote server details (hostname, username, port, and `remote_base_path`) are configured within your project's `config.yaml` file. This makes remote configurations project-specific and version-controllable.
+2.  **File Synchronization:** When you execute a remote command, the local `output/<project_name>` directory is automatically synchronized with a corresponding directory on the remote server using `rsync`. This ensures that your remote `job-manager` instance has access to the latest project files (e.g., Dockerfiles, `config.yaml`, cloned repositories). The remote project directory will be located at `<remote_base_path>/<project_name>`.
 3.  **Remote Command Dispatch:** The local `job-manager` then dispatches the requested command to the remote server via SSH. The remote server executes its own `job-manager` command, and the output is streamed back to your local terminal.
 
 ### Configuring Remotes
@@ -215,6 +219,14 @@ job-manager <command> [options]
 *   **Test a Singularity image on a remote server:**
     ```bash
     job-manager test-singularity --project-name my-new-project --remote my-cluster
+    ```
+*   **Prepare a remote test environment:**
+    ```bash
+    job-manager setup-remote-test-env --project-name my-new-project --remote my-cluster
+    ```
+*   **Start an interactive shell in a Docker image:**
+    ```bash
+    job-manager shell --project-name my-new-project
     ```
 *   **Get help for a command:**
     ```bash
