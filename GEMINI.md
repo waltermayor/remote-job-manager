@@ -21,6 +21,14 @@ remote-job-manager/
 ├── LICENSE
 ├── README.md           # User-facing documentation
 ├── pyproject.toml      # Project metadata and dependencies (PEP 621)
+├── clusters/           # Cluster-specific configurations
+│   └── my-cluster.conf
+├── experiments/        # Experiment definitions
+│   └── my-experiment/
+│       ├── config.yaml
+│       └── grid.yaml
+├── runs/               # Generated SLURM scripts
+│   └── ...
 ├── docs/               # Detailed documentation (e.g., Sphinx)
 │   └── ...
 ├── examples/           # Example configuration files and use cases
@@ -29,7 +37,16 @@ remote-job-manager/
 │   └── <project_name>/
 │       ├── config.yaml
 │       ├── Dockerfile
-│       └── requirements.txt
+│       ├── requirements.txt
+│       └── slurm_runs/
+│           ├── clusters/       # Cluster-specific configurations for SLURM jobs
+│           │   └── my-cluster.conf
+│           ├── experiments/    # Experiment definitions for SLURM jobs
+│           │   └── my-experiment/
+│           │       ├── config.yaml
+│           │       └── grid.yaml
+│           └── runs/           # Generated SLURM scripts
+│               └── ...
 └── src/
     └── remote_job_manager/
         ├── __init__.py
@@ -37,12 +54,14 @@ remote-job-manager/
         ├── config.py       # Configuration loading and validation
         ├── docker_builder.py # Logic for building Docker images
         ├── docker_utils.py # Docker-related utility functions
+        ├── experiment_generator.py # Logic for generating SLURM experiment jobs
         ├── remote.py       # Logic for remote execution via SSH/rsync
         ├── singularity_converter.py # Logic for Docker-to-Singularity conversion
         ├── singularity_utils.py # Singularity-related utility functions
         ├── slurm_submitter.py # Logic for generating and submitting SLURM scripts
         ├── templates/
-        │   └── Dockerfile.template
+        │   ├── Dockerfile.template
+        │   └── slurm.template
         ├── utils.py        # General helper functions
         └── web_utils.py    # Web-related utility functions
 ```
@@ -112,12 +131,20 @@ CMD ["python", "app.py"]
 10. [x] **Implement Remote Execution:** Add the ability to execute commands on remote servers via SSH, with project-specific remote configurations managed in `config.yaml`.
 11. [x] **Implement `setup-remote-test-env` command:** A command to prepare a test environment on a remote server by copying files from the local host.
 12. [x] **Implement `shell` command:** A command to get an interactive shell inside a Docker container and persist changes.
-13. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
-14. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
-15. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
-16. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
-17. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
-18. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
+13. [ ] **Implement Experiment Generation System:** Develop a modular system for generating SLURM experiment jobs.
+    *   [ ] Create universal `slurm.template` with placeholders.
+    *   [ ] Implement cluster configuration loader.
+    *   [ ] Implement experiment configuration (`config.yaml`, `grid.yaml`) loader.
+    *   [ ] Implement grid parameter generator (Cartesian product).
+    *   [ ] Implement command-line argument builder.
+    *   [ ] Implement SLURM script renderer.
+    *   [ ] Create `generate-jobs` command in `cli.py`.
+14. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
+15. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
+16. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
+17. [ ] **Add Validation:** Implement robust validation for the configuration files to catch errors early.
+18. [ ] **Develop Documentation:** Create comprehensive documentation in the `docs/` folder explaining advanced usage, configuration options, and architecture.
+19. [ ] **Package for Distribution:** Ensure the project can be built and published to PyPI.
 
 ## 5. Remote Execution
 
@@ -228,8 +255,35 @@ job-manager <command> [options]
     ```bash
     job-manager shell --project-name my-new-project
     ```
+*   **Generate SLURM experiment jobs:**
+    ```bash
+    job-manager generate-jobs --project-name my-new-project --cluster my-cluster --experiment my-experiment
+    ```
 *   **Get help for a command:**
     ```bash
     job-manager --help
     job-manager template --help
     ```
+
+## 7. Experiment Generation
+
+The `job-manager` tool includes a powerful, modular system for generating large-scale experiments on SLURM clusters. This system is designed for reproducibility, scalability, and clear separation of concerns.
+
+### Architecture Overview
+
+1.  **Universal SLURM Template:** A single, universal `slurm.template` file is used for all jobs. It contains placeholders for job parameters, such as `{{JOB_NAME}}`, `{{ACCOUNT}}`, `{{PARTITION}}`, `{{TIME}}`, `{{GPU_TYPE}}`, `{{NUM_GPUS}}`, `{{CPUS}}`, `{{MEMORY}}`, `{{MODULES}}`, `{{CMD}}`.
+
+2.  **Cluster Configurations:** Each cluster has a dedicated configuration file (e.g., `output/<project_name>/slurm_runs/clusters/my-cluster.conf`). These files define cluster-specific variables like account, partition, available GPUs, and environment modules.
+
+3.  **Experiment Configurations:** Each experiment is defined by two files, located within `output/<project_name>/slurm_runs/experiments/<experiment_name>/`:
+    *   `config.yaml`: Contains fixed parameters for the experiment, such as the script to run, environment name, and other non-sweepable arguments.
+    *   `grid.yaml`: Defines the hyperparameter grid for the experiment. This includes parameters that will be swept, such as learning rates, seed values, hidden layer sizes, etc.
+
+4.  **Job Generator:** The `generate-jobs` command orchestrates the experiment generation process:
+    *   It loads the specified cluster and experiment configurations.
+    *   It computes the Cartesian product of all parameters in the `grid.yaml` file.
+    *   For each resulting combination of hyperparameters, it constructs a command-line call to the experiment script.
+    *   It then renders the `slurm.template` with the combined parameters from the cluster config, experiment config, and the specific hyperparameter combination.
+    *   The final SLURM scripts are saved to a structured directory: `output/<project_name>/slurm_runs/runs/<cluster_name>/<experiment_name>/run_<id>.slurm`.
+
+This architecture ensures that experiments are easy to define, scale, and reproduce across different computing environments.

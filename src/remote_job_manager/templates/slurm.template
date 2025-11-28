@@ -1,0 +1,18 @@
+#!/bin/bash
+#SBATCH --job-name={{JOB_NAME}}
+#SBATCH --account={{ACCOUNT}}
+#SBATCH --partition={{PARTITION}}
+#SBATCH --time={{TIME}}
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task={{CPUS}}
+#SBATCH --mem={{MEMORY}}
+
+# Load necessary modules
+{{MODULES}}
+
+# Activate virtual environment (if any)
+# source /path/to/your/venv/bin/activate
+
+# Run the experiment command
+{{CMD}}

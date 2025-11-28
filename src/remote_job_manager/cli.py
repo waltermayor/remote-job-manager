@@ -565,5 +565,27 @@ def shell(
     from .docker_utils import interactive_shell
     interactive_shell(project_name, config)
 
+@app.command(name="generate-jobs")
+def generate_jobs_command(
+    ctx: typer.Context,
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    cluster_name: str = typer.Option(..., "--cluster", "-c", help="The name of the cluster configuration."),
+    experiment_name: str = typer.Option(..., "--experiment", "-e", help="The name of the experiment."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
+):
+    """
+    Generate SLURM job scripts for a given project, cluster, and experiment.
+    """
+    dispatch_to_remote_if_needed(ctx, remote, project_name)
+
+    ensure_project_initialized(project_name)
+    config = load_project_config(project_name)
+    if not config:
+        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
+        raise typer.Exit(code=1)
+    
+    from .experiment_generator import generate_jobs
+    generate_jobs(project_name, cluster_name, experiment_name)
+
 if __name__ == "__main__":
     app()
