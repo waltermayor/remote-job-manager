@@ -18,8 +18,12 @@ classifiers = [
 ]
 dependencies = [
     "typer[all]",
+    "questionary",
     "pyyaml",
     "rich",
+    "hydra-core",
+    "submitit",
+    "Jinja2",
 ]
 
 [project.urls]

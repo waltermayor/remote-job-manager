@@ -1,4 +1,5 @@
 import typer
+import questionary
 from rich import print
 from pathlib import Path
 import subprocess
@@ -12,8 +13,85 @@ from .docker_utils import run_test_in_container, list_images, run_command_in_con
 from .singularity_utils import convert_docker_to_singularity, run_test_in_singularity
 from .wandb_utils import add_wandb_volumes
 from . import remote as remote_manager
+import yaml
 
 app = typer.Typer()
+
+def _add_cluster_command():
+    """
+    Adds a new global cluster configuration with slurm/remote sections.
+    """
+    print("Adding a new global cluster configuration...")
+    cluster_name = typer.prompt("Cluster name")
+
+    # -------------------------
+    # SLURM CONFIG SECTION
+    # -------------------------
+    slurm_config = {
+        "account": typer.prompt("SLURM Account"),
+        "partition": typer.prompt("SLURM Partition"),
+        "time": typer.prompt("Default job time (e.g., 01:00:00)"),
+        "gpu_type": typer.prompt("GPU type (e.g., a100)"),
+        "num_gpus": typer.prompt("Default number of GPUs", type=int),
+        "cpus": typer.prompt("Default number of CPUs", type=int),
+        "memory": typer.prompt("Default memory (e.g., 32G)"),
+        "modules": typer.prompt(
+            "Modules to load (space-separated)", 
+            default=""
+        ).split(),
+    }
+
+
+    # -------------------------
+    # REMOTE CONFIG SECTION
+    # -------------------------
+    remote_host = typer.prompt("Remote host")
+    remote_user = typer.prompt("Remote user")
+    remote_port = typer.prompt("Remote port", default="22")
+    remote_base_path = typer.prompt(
+        "Remote base path", 
+        default="~/remote-job-manager-workspace"
+    )
+
+    remote_cfg = {
+        "host": remote_host,
+        "user": remote_user,
+        "port": int(remote_port),
+        "remote_base_path": remote_base_path,
+    }
+
+    if typer.confirm("Add initial commands for this remote?"):
+        cmds = []
+        print("Enter commands one per line (empty line to finish):")
+        while True:
+            cmd = typer.prompt("", default="", show_default=False)
+            if not cmd:
+                break
+            cmds.append(cmd)
+        remote_cfg["init_commands"] = cmds
+
+    full_config = {
+        "slurm": slurm_config,
+        "remote": remote_cfg,
+    }
+   
+    # -------------------------
+    # SAVE CONFIG
+    # -------------------------
+    config_dir = Path.home() / ".config" / "remote-job-manager" / "clusters"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    config_file = config_dir / f"{cluster_name}.yaml"
+    with open(config_file, "w") as f:
+        yaml.dump(full_config, f, sort_keys=False)
+
+    print(f"[green]Cluster configuration saved to {config_file}[/green]")
+    return cluster_name
+
+
+@app.command(name="add-cluster")
+def add_cluster_command():
+    _add_cluster_command()
 
 def dispatch_to_remote_if_needed(ctx: typer.Context, remote: str, project_name: str):
     """
@@ -58,8 +136,7 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             "run_command": "",
             "gpus": False,
             "wandb_mode": "offline",
-        },
-        "remotes": {}
+        }
     }
 
     if typer.confirm("Do you want to configure the test information now?"):
@@ -78,33 +155,39 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
             "wandb_mode": wandb_mode,
         }
 
-    if typer.confirm("Do you want to configure a remote server for this project?"):
-        while True:
-            remote_name = typer.prompt("Enter a name for the remote (e.g., 'my-cluster')")
-            remote_host = typer.prompt("Remote host address")
-            remote_user = typer.prompt("Remote user")
-            remote_port = typer.prompt("Remote port", default="22")
-            remote_base_path = typer.prompt("Remote base path", default="~/remote-job-manager-workspace")
-            
-            config["remotes"][remote_name] = {
-                "host": remote_host,
-                "user": remote_user,
-                "port": int(remote_port),
-                "remote_base_path": remote_base_path,
-            }
+    # Create Hydra config structure
+    conf_dir = Path("output") / project_name / "conf"
+    (conf_dir / "cluster").mkdir(parents=True, exist_ok=True)
+    (conf_dir / "experiment").mkdir(parents=True, exist_ok=True)
+    (conf_dir / "grid").mkdir(parents=True, exist_ok=True)
+    
+    # Create a default project.yaml
+    with open(conf_dir / "project.yaml", "w") as f:
+        f.write("# Project-level defaults\n")
 
-            if typer.confirm("Do you want to add initial commands for this remote?"):
-                init_commands = []
-                print("Enter initial commands one by one (press Enter on an empty line to finish):")
-                while True:
-                    command = typer.prompt("", default="", show_default=False)
-                    if not command:
-                        break
-                    init_commands.append(command)
-                config["remotes"][remote_name]["init_commands"] = init_commands
-            
-            if not typer.confirm("Do you want to add another remote?"):
-                break
+    # Link global cluster configs
+    global_cluster_dir = Path.home() / ".config" / "remote-job-manager" / "clusters"
+    available_clusters = [f.stem for f in global_cluster_dir.glob("*.yaml")]
+    choices = available_clusters + ["<Create new cluster config>"]
+
+    selected = questionary.select(
+        "Select a cluster config:",
+        choices=choices
+    ).ask()
+
+    if selected is None:
+        print("Cancelled.")
+        raise typer.Exit()
+
+    if selected == "<Create new cluster config>":
+        print("Creating a new cluster config...")
+        selected = _add_cluster_command()
+
+    if selected: 
+        src = global_cluster_dir / f"{selected}.yaml"
+        dest = conf_dir / "cluster" / f"{selected}.yaml"
+        shutil.copy(src, dest)
+        print(f"Associated cluster '{selected}' with the project.")
 
     save_project_config(project_name, config)
     create_docker_template(project_name)
@@ -565,27 +648,161 @@ def shell(
     from .docker_utils import interactive_shell
     interactive_shell(project_name, config)
 
-@app.command(name="generate-jobs")
+def _create_experiment_config(project_name: str, config_name: str = None) -> str:
+    """Internal function to create a base experiment config."""
+    if not config_name:
+        config_name = typer.prompt("Configuration name (e.g., 'bert_base')")
+
+    print("\n--- Configuring Fixed Parameters ---")
+    fixed_params = {}
+    fixed_params['script'] = typer.prompt("Enter the base script to run (e.g., python train.py)")
+    print("Enter fixed parameters (key=value), one per line. Press Enter on an empty line to finish.")
+    while True:
+        param = typer.prompt("", default="", show_default=False)
+        if not param:
+            break
+        if "=" not in param:
+            print("Invalid format. Please use key=value.")
+            continue
+        key, value = param.split("=", 1)
+        fixed_params[key.strip()] = value.strip()
+
+    conf_dir = Path("output") / project_name / "conf"
+    exp_dir = conf_dir / "experiment"
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    exp_file = exp_dir / f"{config_name}.yaml"
+    with open(exp_file, 'w') as f:
+        yaml.dump(fixed_params, f, sort_keys=False)
+    print(f"\n[green]Experiment configuration saved to {exp_file}[/green]")
+    return config_name
+
+def _create_grid_config(project_name: str, config_name: str = None) -> str:
+    """Internal function to create a grid search config."""
+    if not config_name:
+        config_name = typer.prompt("Configuration name (e.g., 'lr_sweep')")
+
+    print("\n--- Configuring Grid Search Parameters ---")
+    grid_params = {}
+    print("Enter grid parameters (key=value1,value2,...), one per line. Press Enter on an empty line to finish.")
+    while True:
+        param = typer.prompt("", default="", show_default=False)
+        if not param:
+            break
+        if "=" not in param:
+            print("Invalid format. Please use key=value1,value2,...")
+            continue
+        key, value_str = param.split("=", 1)
+        values = [v.strip() for v in value_str.split(",")]
+        grid_params[key.strip()] = values
+
+    conf_dir = Path("output") / project_name / "conf"
+    grid_dir = conf_dir / "grid"
+    grid_dir.mkdir(parents=True, exist_ok=True)
+    grid_file = grid_dir / f"{config_name}.yaml"
+    with open(grid_file, 'w') as f:
+        yaml.dump(grid_params, f, sort_keys=False)
+    print(f"\n[green]Grid configuration saved to {grid_file}[/green]")
+    return config_name
+
+@app.command(name="add-experiment-config")
+def add_experiment_config_command(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+):
+    """
+    Adds a new reusable base experiment configuration.
+    """
+    print("Adding a new base experiment configuration...")
+    _create_experiment_config(project_name)
+
+@app.command(name="add-grid-config")
+def add_grid_config_command(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+):
+    """
+    Adds a new reusable grid search configuration.
+    """
+    print("Adding a new grid search configuration...")
+    _create_grid_config(project_name)
+
+@app.command(name="add-experiment")
+def add_experiment_command(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+):
+    """
+    Wizard to create a new experiment run by combining an experiment config and a new grid config.
+    """
+    ensure_project_initialized(project_name)
+    conf_dir = Path("output") / project_name / "conf"
+    exp_dir = conf_dir / "experiment"
+
+    # --- Step 1: Select or Create Base Experiment Config ---
+    base_exp_config_name = ""
+    available_exp_configs = [f.stem for f in exp_dir.glob("*.yaml")]
+    choices = available_exp_configs + ["<Create new experiment config>"]
+
+    selected = questionary.select(
+        "Select a base experiment config:",
+        choices=choices
+    ).ask()
+
+    if selected is None:
+        print("Cancelled.")
+        raise typer.Exit()
+
+    if selected == "<Create new experiment config>":
+        print("Creating a new experiment config...")
+        base_exp_config_name = _create_experiment_config(project_name)
+
+    else:
+        base_exp_config_name = _create_experiment_config(project_name, selected)
+    
+    # --- Step 2: Create Grid Config for this Run ---
+    print(f"\nNow, let's create a grid search for the '{base_exp_config_name}' experiment.")
+    grid_name_suggestion = f"{base_exp_config_name}_grid_{uuid.uuid4().hex[:4]}"
+    grid_config_name = typer.prompt(f"Enter a name for this new grid configuration", default=grid_name_suggestion)
+    
+    _create_grid_config(project_name, grid_config_name)
+
+    # --- Step 3: Show launch command ---
+    print("\n[bold green]Experiment run created successfully![/bold green]")
+    print("You can now launch this run with a command like this:")
+    print(f"  job-manager generate-jobs --project-name {project_name} cluster=<your_cluster> experiment={base_exp_config_name} grid={grid_config_name} --multirun")
+
+
+@app.command(name="generate-jobs", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def generate_jobs_command(
     ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
-    cluster_name: str = typer.Option(..., "--cluster", "-c", help="The name of the cluster configuration."),
-    experiment_name: str = typer.Option(..., "--experiment", "-e", help="The name of the experiment."),
     remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
-    Generate SLURM job scripts for a given project, cluster, and experiment.
+    Generate and launch SLURM jobs using Hydra.
+    
+    Pass any additional arguments for Hydra after the command, e.g.:
+    `job-manager generate-jobs --project-name my-proj experiment=my-exp --multirun`
     """
-    dispatch_to_remote_if_needed(ctx, remote, project_name)
+    #dispatch_to_remote_if_needed(ctx, remote, project_name)
 
     ensure_project_initialized(project_name)
-    config = load_project_config(project_name)
-    if not config:
-        print(f"Error: config.yaml not found for project '{project_name}'. Please run 'init' first.")
-        raise typer.Exit(code=1)
     
-    from .experiment_generator import generate_jobs
-    generate_jobs(project_name, cluster_name, experiment_name)
+    job_launcher_script = Path(__file__).parent / "job_launcher.py"
+    config_dir = Path("output") / project_name / "conf"
+
+    if not config_dir.exists():
+        print(f"Error: Configuration directory not found at {config_dir}")
+        print("Please ensure the project has been initialized correctly.")
+        raise typer.Exit(code=1)
+
+    command = [
+        "python",
+        str(job_launcher_script),
+        f"--config-dir={config_dir.resolve()}",
+    ] + ctx.args
+
+    print("Invoking Hydra job launcher...")
+    print(f"Command: {' '.join(command)}")
+    
+    subprocess.run(command)
 
 if __name__ == "__main__":
     app()

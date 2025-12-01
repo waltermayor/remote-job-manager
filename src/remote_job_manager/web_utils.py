@@ -3,6 +3,20 @@ from pathlib import Path
 from rich import print
 import typer
 
+def is_valid_git_repo(url: str) -> bool:
+    try:
+        subprocess.run(
+            ["git", "ls-remote", url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+        return True
+    except subprocess.CalledProcessError:
+        return False
+    except Exception:
+        return False
+
 def clone_repo(repo_url: str, target_dir: Path):
     """
     Clones a git repository into a target directory, skipping if it already exists.
@@ -10,6 +24,10 @@ def clone_repo(repo_url: str, target_dir: Path):
     git_dir = target_dir / ".git"
     if git_dir.is_dir():
         print(f"Repository already exists in {target_dir}, skipping clone.")
+        return
+
+    if not is_valid_git_repo(repo_url):
+        print(f"Warning: The repository URL '{repo_url}' is not valid or accessible, skipping clone.")
         return
 
     print(f"Cloning repository: {repo_url}")

@@ -5,7 +5,8 @@ def get_project_config_path(project_name: str) -> Path:
     """
     Returns the path to the config.yaml file for a given project.
     """
-    return Path("output") / project_name / "config.yaml"
+    return Path("output") / project_name / "conf"/"project.yaml"
+    #return Path("output") / project_name / "config.yaml"
 
 def load_project_config(project_name: str) -> dict:
     """

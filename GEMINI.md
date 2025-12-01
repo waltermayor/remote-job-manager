@@ -21,51 +21,42 @@ remote-job-manager/
 ├── LICENSE
 ├── README.md           # User-facing documentation
 ├── pyproject.toml      # Project metadata and dependencies (PEP 621)
-├── clusters/           # Cluster-specific configurations
-│   └── my-cluster.conf
-├── experiments/        # Experiment definitions
-│   └── my-experiment/
-│       ├── config.yaml
-│       └── grid.yaml
-├── runs/               # Generated SLURM scripts
-│   └── ...
 ├── docs/               # Detailed documentation (e.g., Sphinx)
 │   └── ...
 ├── examples/           # Example configuration files and use cases
 │   └── simple_job.yaml
 ├── output/             # Default directory for project outputs
 │   └── <project_name>/
-│       ├── config.yaml
 │       ├── Dockerfile
 │       ├── requirements.txt
-│       └── slurm_runs/
-│           ├── clusters/       # Cluster-specific configurations for SLURM jobs
-│           │   └── my-cluster.conf
-│           ├── experiments/    # Experiment definitions for SLURM jobs
-│           │   └── my-experiment/
-│           │       ├── config.yaml
-│           │       └── grid.yaml
-│           └── runs/           # Generated SLURM scripts
-│               └── ...
+│       └── conf/
+│           ├── project.yaml      # Project-level defaults
+│           ├── cluster/          # Cluster configurations for this project
+│           │   └── my-cluster.yaml
+│           ├── experiment/       # Experiment configurations
+│           │   └── my-experiment.yaml
+│           └── grid/             # Grid search configurations
+│               └── my-grid.yaml
 └── src/
     └── remote_job_manager/
         ├── __init__.py
         ├── cli.py          # Main CLI application (Typer/Click)
         ├── config.py       # Configuration loading and validation
-        ├── docker_builder.py # Logic for building Docker images
         ├── docker_utils.py # Docker-related utility functions
-        ├── experiment_generator.py # Logic for generating SLURM experiment jobs
+        ├── job_launcher.py # Hydra-based job launcher
         ├── remote.py       # Logic for remote execution via SSH/rsync
-        ├── singularity_converter.py # Logic for Docker-to-Singularity conversion
         ├── singularity_utils.py # Singularity-related utility functions
         ├── slurm_submitter.py # Logic for generating and submitting SLURM scripts
         ├── templates/
         │   ├── Dockerfile.template
-        │   └── slurm.template
+        |   ├── prepare_remote_test_env.sh
+        │   └── slurm.template.jinja2
         ├── utils.py        # General helper functions
         └── web_utils.py    # Web-related utility functions
+
+Global cluster configurations are stored in `~/.config/remote-job-manager/clusters/`.
 ```
-**Example `config.yaml` structure:**
+**Example `project.yaml` structure:**
 ```yaml
 general:
   project_name: my-project
@@ -78,12 +69,24 @@ test:
     python main.py --data_dir=<YOUR_DATA_DIRECTORY>/unzipped_dataset
   gpus: true
   wandb_mode: "offline"
-remotes:
-  my-cluster:
-    host: login.server.mila.quebec
-    user: mayorw
-    port: 2222
-    remote_base_path: ~/remote-job-manager-workspace
+
+```
+**Example `my-cluster.yaml` structure:**
+```yaml
+slurm:
+  account: default_account
+  partition: debug
+  time: 00:10:00
+  gpu_type: a1000l
+  num_gpus: 1
+  cpus: 1
+  memory: 32G
+  modules: []
+remote:
+  host: login.server.mila.quebec
+  user: mayorw
+  port: 2222
+  remote_base_path: ~/remote-job-manager-workspace
 
 ```
 **Example `Dockerfile.template` with LABEL:**
@@ -131,14 +134,14 @@ CMD ["python", "app.py"]
 10. [x] **Implement Remote Execution:** Add the ability to execute commands on remote servers via SSH, with project-specific remote configurations managed in `config.yaml`.
 11. [x] **Implement `setup-remote-test-env` command:** A command to prepare a test environment on a remote server by copying files from the local host.
 12. [x] **Implement `shell` command:** A command to get an interactive shell inside a Docker container and persist changes.
-13. [ ] **Implement Experiment Generation System:** Develop a modular system for generating SLURM experiment jobs.
-    *   [ ] Create universal `slurm.template` with placeholders.
-    *   [ ] Implement cluster configuration loader.
-    *   [ ] Implement experiment configuration (`config.yaml`, `grid.yaml`) loader.
-    *   [ ] Implement grid parameter generator (Cartesian product).
-    *   [ ] Implement command-line argument builder.
-    *   [ ] Implement SLURM script renderer.
-    *   [ ] Create `generate-jobs` command in `cli.py`.
+13. [ ] **Implement Hydra-based Experiment System:** Overhaul the experiment generation and submission system using Hydra, Submitit, and Jinja2.
+    *   [x] Add `hydra-core`, `submitit`, and `Jinja2` to dependencies.
+    *   [x] Create `add-cluster` command for managing global cluster configurations.
+    *   [x] Create `add-experiment-config` command for creating base experiment configurations.
+    *   [x] Create `add-grid-config` command for creating grid search configurations.
+    *   [x] Update `init` command to select from global cluster configs.
+    *   [x] Implement Hydra-based job launcher (`job_launcher.py`).
+    *   [x] Update `generate-jobs` command to invoke the Hydra launcher.
 14. [ ] **Implement SLURM Submitter:** Develop the `slurm_submitter.py` module to generate `sbatch` scripts from a template and submit them using `sbatch`.
 15. [ ] **Add Testing Framework:** Set up `pytest` and write initial unit tests for the configuration loader and CLI stubs.
 16. [ ] **Implement Logging:** Integrate structured logging throughout the application to provide clear feedback to the user.
@@ -152,34 +155,36 @@ The `job-manager` tool now supports executing commands on remote servers via SSH
 
 ### How it Works
 
-1.  **Configuration:** Remote server details (hostname, username, port, and `remote_base_path`) are configured within your project's `config.yaml` file. This makes remote configurations project-specific and version-controllable.
+1.  **Configuration:** Remote server details (hostname, username, port, and `remote_base_path`) are configured within your project's `conf/cluster/my-cluster.yaml` file. This makes remote configurations project-specific and version-controllable.
 2.  **File Synchronization:** When you execute a remote command, the local `output/<project_name>` directory is automatically synchronized with a corresponding directory on the remote server using `rsync`. This ensures that your remote `job-manager` instance has access to the latest project files (e.g., Dockerfiles, `config.yaml`, cloned repositories). The remote project directory will be located at `<remote_base_path>/<project_name>`.
 3.  **Remote Command Dispatch:** The local `job-manager` then dispatches the requested command to the remote server via SSH. The remote server executes its own `job-manager` command, and the output is streamed back to your local terminal.
 
 ### Configuring Remotes
 
-You can configure remotes when initializing a new project (`job-manager init`) or by using the `job-manager configure` command for an existing project.
+You can configure remotes when initializing a new project (`job-manager init`) or by using the `job-manager add-cluster` 
 
-**Example `config.yaml` with remotes:**
-
+**Example `my-cluster.yaml` structure:**
 ```yaml
-general:
-  project_name: my-project
-# ... other configurations ...
-remotes:
-  my-cluster:
-    host: login.server.mila.quebec
-    user: mayorw
-    port: 2222
-  dev-server:
-    host: dev.example.com
-    user: myuser
-    port: 22
+slurm:
+  account: default_account
+  partition: debug
+  time: 00:10:00
+  gpu_type: a1000l
+  num_gpus: 1
+  cpus: 1
+  memory: 32G
+  modules: []
+remote:
+  host: login.server.mila.quebec
+  user: mayorw
+  port: 2222
+  remote_base_path: ~/remote-job-manager-workspace
+
 ```
 
 ### Using the `--remote` Flag
 
-To execute any command on a remote server, simply add the `--remote <remote_name>` flag, where `<remote_name>` is the name you configured in your project's `config.yaml`.
+To execute any command on a remote server, simply add the `--remote <remote_name>` flag, where `<remote_name>` is the name you configured in your project's `my-cluster.yaml`.
 
 ## 6. How to Run CLI Commands
 
@@ -255,9 +260,21 @@ job-manager <command> [options]
     ```bash
     job-manager shell --project-name my-new-project
     ```
-*   **Generate SLURM experiment jobs:**
+*   **Add a new global cluster configuration:**
     ```bash
-    job-manager generate-jobs --project-name my-new-project --cluster my-cluster --experiment my-experiment
+    job-manager add-cluster
+    ```
+*   **Add a new base experiment configuration:**
+    ```bash
+    job-manager add-experiment-config --project-name my-new-project
+    ```
+*   **Add a new grid search configuration:**
+    ```bash
+    job-manager add-grid-config --project-name my-new-project
+    ```
+*   **Generate and launch SLURM jobs with Hydra:**
+    ```bash
+    job-manager generate-jobs --project-name my-new-project cluster=my-cluster experiment=bert grid=lr_sweep --multirun
     ```
 *   **Get help for a command:**
     ```bash
@@ -265,25 +282,36 @@ job-manager <command> [options]
     job-manager template --help
     ```
 
-## 7. Experiment Generation
+## 7. Experiment Generation with Hydra and Submitit
 
-The `job-manager` tool includes a powerful, modular system for generating large-scale experiments on SLURM clusters. This system is designed for reproducibility, scalability, and clear separation of concerns.
+The experiment generation and submission system is built on a powerful stack of open-source tools: **Hydra** for configuration management, **Jinja2** for script templating, and **Submitit** for launching jobs on SLURM clusters.
 
 ### Architecture Overview
 
-1.  **Universal SLURM Template:** A single, universal `slurm.template` file is used for all jobs. It contains placeholders for job parameters, such as `{{JOB_NAME}}`, `{{ACCOUNT}}`, `{{PARTITION}}`, `{{TIME}}`, `{{GPU_TYPE}}`, `{{NUM_GPUS}}`, `{{CPUS}}`, `{{MEMORY}}`, `{{MODULES}}`, `{{CMD}}`.
+This architecture provides a highly flexible and scalable way to define and run experiments.
 
-2.  **Cluster Configurations:** Each cluster has a dedicated configuration file (e.g., `output/<project_name>/slurm_runs/clusters/my-cluster.conf`). These files define cluster-specific variables like account, partition, available GPUs, and environment modules.
+1.  **Core Tools**:
+    *   **Hydra**: Manages all configuration layers—cluster settings, project defaults, experiment parameters, and grid sweeps—acting as the central configuration system.
+    *   **Jinja2**: Generates the SLURM scripts from a clean template (`slurm.template.jinja2`), serving as the template engine.
+    *   **Submitit**: Submits the generated SLURM scripts or Python functions directly to the SLURM scheduler from within Python, acting as the job launcher.
 
-3.  **Experiment Configurations:** Each experiment is defined by two files, located within `output/<project_name>/slurm_runs/experiments/<experiment_name>/`:
-    *   `config.yaml`: Contains fixed parameters for the experiment, such as the script to run, environment name, and other non-sweepable arguments.
-    *   `grid.yaml`: Defines the hyperparameter grid for the experiment. This includes parameters that will be swept, such as learning rates, seed values, hidden layer sizes, etc.
+2.  **Configuration Hierarchy**:
+    Configurations are composed from multiple files, with values from later layers overriding earlier ones. The merge order is:
+    `Global Cluster Config` → `Project Config` → `Experiment Config` → `Grid Overrides`
 
-4.  **Job Generator:** The `generate-jobs` command orchestrates the experiment generation process:
-    *   It loads the specified cluster and experiment configurations.
-    *   It computes the Cartesian product of all parameters in the `grid.yaml` file.
-    *   For each resulting combination of hyperparameters, it constructs a command-line call to the experiment script.
-    *   It then renders the `slurm.template` with the combined parameters from the cluster config, experiment config, and the specific hyperparameter combination.
-    *   The final SLURM scripts are saved to a structured directory: `output/<project_name>/slurm_runs/runs/<cluster_name>/<experiment_name>/run_<id>.slurm`.
+3.  **Configuration Locations**:
+    *   **Global Cluster Configs**: Stored in `~/.config/remote-job-manager/clusters/`. These are YAML files defining cluster-specific parameters (e.g., account, partition, modules) and are shared across all projects. A new cluster can be added using the `add-cluster` command.
+    *   **Project Configs**: Each project has a `conf/` directory within its `output/<project_name>/` folder.
+        *   `conf/project.yaml`: Defines project-level defaults and settings.
+        *   `conf/cluster/`: Contains project-specific cluster configurations or overrides.
+        *   `conf/experiment/`: Holds reusable base experiment configurations (e.g., `bert.yaml`, `resnet.yaml`), created with the `add-experiment-config` command.
+        *   `conf/grid/`: Holds reusable grid search configurations (e.g., `lr_sweep.yaml`, `full_grid.yaml`), created with the `add-grid-config` command.
 
-This architecture ensures that experiments are easy to define, scale, and reproduce across different computing environments.
+4.  **Job Generation and Launch**:
+    *   An experiment run is composed on the command line by combining a cluster, an experiment config, and a grid config.
+    *   The `generate-jobs` command launches the composed experiment.
+    *   It invokes a Hydra-enabled Python script (`job_launcher.py`) that:
+        1.  Uses Hydra to compose the final configuration from `cluster`, `project`, `experiment`, and `grid` files specified in the command line (e.g., `cluster=my-cluster experiment=bert grid=lr_sweep`).
+        2.  Leverages Hydra's sweeper to generate the Cartesian product of all grid parameters.
+        3.  For each parameter combination, it uses Jinja2 to render a SLURM script.
+        4.  Uses Submitit to submit the rendered script to the specified SLURM cluster.
