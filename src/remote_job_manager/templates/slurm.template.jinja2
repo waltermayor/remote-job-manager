@@ -1,0 +1,21 @@
+#!/bin/bash
+#SBATCH --job-name={{ job_name }}
+#SBATCH --account={{ account }}
+#SBATCH --partition={{ partition }}
+#SBATCH --time={{ time }}
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task={{ cpus }}
+#SBATCH --gpus-per-node={{ num_gpus }}
+#SBATCH --mem={{ memory }}
+
+# Load necessary modules
+{% if modules %}
+module load {{ modules | join(' ') }}
+{% endif %}
+
+# Activate virtual environment (if any)
+# source /path/to/your/venv/bin/activate
+
+# Run the experiment command
+{{ cmd }}

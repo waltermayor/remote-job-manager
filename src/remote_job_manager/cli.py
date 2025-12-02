@@ -2,6 +2,7 @@ import typer
 import questionary
 from rich import print
 from pathlib import Path
+from omegaconf import DictConfig, OmegaConf
 import subprocess
 import shutil
 import uuid
@@ -160,10 +161,39 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
     (conf_dir / "cluster").mkdir(parents=True, exist_ok=True)
     (conf_dir / "experiment").mkdir(parents=True, exist_ok=True)
     (conf_dir / "grid").mkdir(parents=True, exist_ok=True)
-    
-    # Create a default project.yaml
-    with open(conf_dir / "project.yaml", "w") as f:
-        f.write("# Project-level defaults\n")
+    (conf_dir / "project").mkdir(parents=True, exist_ok=True)
+
+    # Create a main config.yaml as the entry point for Hydra
+    with open(conf_dir / "config.yaml", "w") as f:
+        f.write(
+                """# disable struct mode globally
+                _hydra_enable_legacy_struct_: true
+                
+                defaults:
+                - project: default
+                - cluster: default
+                - experiment: default
+                - grid: default
+                - _self_
+
+                # These keys are used internally by the CLI
+                no_submit: false
+                slurm_output_dir: null
+                job_index: 0
+                """)
+
+    # Create a default project config
+    with open(conf_dir / "project" / "default.yaml", "w") as f:
+        yaml.dump({"general": config["general"], "test": config["test"]}, f, sort_keys=False)
+
+    # Create placeholder default configs
+    with open(conf_dir / "cluster" / "default.yaml", "w") as f:
+        f.write("# Default cluster config (can be overridden, e.g., cluster=mila)\n")
+    with open(conf_dir / "experiment" / "default.yaml", "w") as f:
+        f.write("# Default experiment config\nscript: echo 'No script specified.'\n")
+    with open(conf_dir / "grid" / "default.yaml", "w") as f:
+        f.write("# Default grid config\n")
+
 
     # Link global cluster configs
     global_cluster_dir = Path.home() / ".config" / "remote-job-manager" / "clusters"
@@ -171,7 +201,7 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
     choices = available_clusters + ["<Create new cluster config>"]
 
     selected = questionary.select(
-        "Select a cluster config:",
+        "Select a cluster config to associate with this project:",
         choices=choices
     ).ask()
 
@@ -187,7 +217,7 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
         src = global_cluster_dir / f"{selected}.yaml"
         dest = conf_dir / "cluster" / f"{selected}.yaml"
         shutil.copy(src, dest)
-        print(f"Associated cluster '{selected}' with the project.")
+        print(f"Associated cluster '{selected}' with the project. You can use it with 'cluster={selected}'.")
 
     save_project_config(project_name, config)
     create_docker_template(project_name)
@@ -769,40 +799,159 @@ def add_experiment_command(
     print(f"  job-manager generate-jobs --project-name {project_name} cluster=<your_cluster> experiment={base_exp_config_name} grid={grid_config_name} --multirun")
 
 
-@app.command(name="generate-jobs", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
-def generate_jobs_command(
+@app.command(name="generate-slurm")
+def generate_slurm_command(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    experiment_config: str = typer.Option(..., "--experiment-config", "-e", help="Name of the experiment config file (without .yaml)."),
+    grid_config: str = typer.Option(..., "--grid-config", "-g", help="Name of the grid config file (without .yaml)."),
+    cluster: str = typer.Option(..., "--cluster", "-c", help="Name of the cluster config file (without .yaml)."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
+):
+    """
+    Generate SLURM scripts for an experiment run without submitting them.
+    """
+    ensure_project_initialized(project_name)
+
+    # ----- Load config files manually (NO multirun) -----
+    conf_dir = Path("output") / project_name / "conf"
+    
+    experiment = OmegaConf.load(conf_dir / "experiment" / f"{experiment_config}.yaml")
+    grid = OmegaConf.load(conf_dir / "grid" / f"{grid_config}.yaml")
+    cluster_conf = OmegaConf.load(conf_dir / "cluster" / f"{cluster}.yaml")
+    project_conf = OmegaConf.load(conf_dir / "project" / "default.yaml")
+
+    # ----- Create output dir -----
+    experiment_name = f"{experiment_config}__{grid_config}"
+    slurm_output_dir = Path("output") / project_name / "slurm_runs" / experiment_name
+    slurm_output_dir.mkdir(parents=True, exist_ok=True)
+
+    # ----- Cartesian product of grid -----
+    from itertools import product
+
+    grid_keys = list(grid.keys())
+    grid_values = [grid[k] for k in grid_keys]
+    combinations = list(product(*grid_values))
+
+    print(f"Generating {len(combinations)} SLURM scripts...")
+
+    job_launcher_script = Path(__file__).parent / "job_launcher.py"
+
+    for job_idx, combo in enumerate(combinations):
+
+        cli_args = []
+        for key, val in zip(grid_keys, combo):
+            cli_args.append(f"+{key}={val}")
+
+        command = [
+            "python",
+            str(job_launcher_script.resolve()),
+            f"--config-dir={conf_dir}",
+            "--config-name=config",
+            f"experiment={experiment_config}",
+            f"cluster={cluster}",
+            "no_submit=True",
+            f"slurm_output_dir={slurm_output_dir}",
+            f"job_index={job_idx}",
+        ] + cli_args
+
+        command_str = " ".join(command)
+        print(f"\n[blue]Running:[/blue] {command_str}\n")
+        subprocess.run(command_str, shell=True)
+
+    print(f"\n[green]All SLURM scripts saved into: {slurm_output_dir}[/green]")
+@app.command(name="submit-slurm")
+def submit_slurm_command(
+    project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
+    experiment_name: str = typer.Option(..., "--experiment-name", "-en", help="The unique name of the experiment run (e.g., ppo__lr_up)."),
+    remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use for submission."),
+):
+    """
+    Submit previously generated SLURM scripts for an experiment run.
+    """
+    ensure_project_initialized(project_name)
+    slurm_runs_dir = Path("output") / project_name / "slurm_runs" / experiment_name
+    
+    if not slurm_runs_dir.exists():
+        print(f"[red]Error: SLURM run directory not found at {slurm_runs_dir}[/red]")
+        print("Please run 'generate-slurm' first.")
+        raise typer.Exit(code=1)
+
+    scripts_to_submit = list(slurm_runs_dir.glob("*.slurm"))
+    if not scripts_to_submit:
+        print(f"[yellow]No .slurm files found in {slurm_runs_dir}.[/yellow]")
+        raise typer.Exit()
+
+    print(f"Found {len(scripts_to_submit)} scripts to submit from {slurm_runs_dir}.")
+
+    if remote:
+        # Remote submission
+        config = load_project_config(project_name)
+        if "remotes" not in config or remote not in config["remotes"]:
+            print(f"Error: Remote '{remote}' not configured for project '{project_name}'.")
+            raise typer.Exit(code=1)
+        remote_config = config["remotes"][remote]
+        
+        remote_base_path = remote_config.get("remote_base_path", "~/remote-job-manager-workspace")
+        remote_project_dir = f"{remote_base_path}/{project_name}"
+        remote_scripts_dir = f"{remote_project_dir}/output/{project_name}/slurm_runs/{experiment_name}"
+        
+        print(f"Syncing project to remote '{remote}' before submission...")
+        remote_manager.sync_project_to_remote(remote_config, project_name)
+
+        for script_path in scripts_to_submit:
+            remote_script_path = f"{remote_scripts_dir}/{script_path.name}"
+            submit_cmd = f"sbatch {remote_script_path}"
+            print(f"Submitting on remote: {submit_cmd}")
+            remote_manager.run_remote_command(remote_config, submit_cmd)
+    else:
+        # Local submission
+        for script_path in scripts_to_submit:
+            submit_cmd = ["sbatch", str(script_path.resolve())]
+            print(f"Submitting locally: {' '.join(submit_cmd)}")
+            try:
+                result = subprocess.run(submit_cmd, check=True, capture_output=True, text=True)
+                print(result.stdout.strip())
+            except FileNotFoundError:
+                print("[red]Error: 'sbatch' command not found. Are you on a SLURM login node?[/red]")
+                raise typer.Exit(code=1)
+            except subprocess.CalledProcessError as e:
+                print(f"[red]Error submitting job {script_path.name}:[/red]")
+                print(e.stderr)
+
+
+@app.command(name="generate-and-submit", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def generate_and_submit_command(
     ctx: typer.Context,
     project_name: str = typer.Option(..., "--project-name", "-n", help="The name of the project."),
     remote: str = typer.Option(None, "--remote", "-r", help="The name of the remote server to use."),
 ):
     """
-    Generate and launch SLURM jobs using Hydra.
+    Generate and launch SLURM jobs using Hydra in a single step.
     
     Pass any additional arguments for Hydra after the command, e.g.:
-    `job-manager generate-jobs --project-name my-proj experiment=my-exp --multirun`
+    `... generate-and-submit --project-name my-proj cluster=my-cluster experiment=my-exp grid=my-grid --multirun`
     """
     #dispatch_to_remote_if_needed(ctx, remote, project_name)
 
     ensure_project_initialized(project_name)
     
+    project_output_dir = Path("output") / project_name
     job_launcher_script = Path(__file__).parent / "job_launcher.py"
-    config_dir = Path("output") / project_name / "conf"
 
-    if not config_dir.exists():
-        print(f"Error: Configuration directory not found at {config_dir}")
+    if not (project_output_dir / "conf").exists():
+        print(f"Error: Configuration directory not found in {project_output_dir}")
         print("Please ensure the project has been initialized correctly.")
         raise typer.Exit(code=1)
 
     command = [
         "python",
-        str(job_launcher_script),
-        f"--config-dir={config_dir.resolve()}",
+        str(job_launcher_script.resolve()),
     ] + ctx.args
 
-    print("Invoking Hydra job launcher...")
-    print(f"Command: {' '.join(command)}")
-    
-    subprocess.run(command)
+    print("Invoking Hydra to generate and submit jobs...")
+    command_str = " ".join(command)
+    print(f"Command: {command_str}")
+    subprocess.run(command_str, shell=True, cwd=project_output_dir)
 
 if __name__ == "__main__":
     app()

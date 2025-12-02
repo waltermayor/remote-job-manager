@@ -29,6 +29,10 @@ remote-job-manager/
 │   └── <project_name>/
 │       ├── Dockerfile
 │       ├── requirements.txt
+│       ├── slurm_runs/
+│       │   └── <experiment_name>/
+│       │       ├── job_0.slurm
+│       │       └── ...
 │       └── conf/
 │           ├── project.yaml      # Project-level defaults
 │           ├── cluster/          # Cluster configurations for this project
@@ -139,6 +143,10 @@ CMD ["python", "app.py"]
     *   [x] Create `add-cluster` command for managing global cluster configurations.
     *   [x] Create `add-experiment-config` command for creating base experiment configurations.
     *   [x] Create `add-grid-config` command for creating grid search configurations.
+    *   [ ] Implement `generate-slurm` command for script generation.
+    *   [ ] Implement `submit-slurm` command for job submission.
+    *   [ ] Rename `generate-jobs` to `generate-and-submit`.
+    *   [ ] Modify `job_launcher.py` to support `--no-submit` flag.
     *   [x] Update `init` command to select from global cluster configs.
     *   [x] Implement Hydra-based job launcher (`job_launcher.py`).
     *   [x] Update `generate-jobs` command to invoke the Hydra launcher.
@@ -272,9 +280,17 @@ job-manager <command> [options]
     ```bash
     job-manager add-grid-config --project-name my-new-project
     ```
-*   **Generate and launch SLURM jobs with Hydra:**
+*   **Generate SLURM scripts for an experiment run:**
     ```bash
-    job-manager generate-jobs --project-name my-new-project cluster=my-cluster experiment=bert grid=lr_sweep --multirun
+    job-manager generate-slurm --project-name my-new-project --experiment-config ppo --grid-config lr_up --cluster my-cluster
+    ```
+*   **Submit the generated SLURM scripts for an experiment run:**
+    ```bash
+    job-manager submit-slurm --project-name my-new-project --experiment-name ppo__lr_up --remote my-cluster
+    ```
+*   **Generate and launch SLURM jobs in one step:**
+    ```bash
+    job-manager generate-and-submit --project-name my-new-project cluster=my-cluster experiment=bert grid=lr_sweep --multirun
     ```
 *   **Get help for a command:**
     ```bash
@@ -307,11 +323,18 @@ This architecture provides a highly flexible and scalable way to define and run 
         *   `conf/experiment/`: Holds reusable base experiment configurations (e.g., `bert.yaml`, `resnet.yaml`), created with the `add-experiment-config` command.
         *   `conf/grid/`: Holds reusable grid search configurations (e.g., `lr_sweep.yaml`, `full_grid.yaml`), created with the `add-grid-config` command.
 
-4.  **Job Generation and Launch**:
-    *   An experiment run is composed on the command line by combining a cluster, an experiment config, and a grid config.
-    *   The `generate-jobs` command launches the composed experiment.
-    *   It invokes a Hydra-enabled Python script (`job_launcher.py`) that:
-        1.  Uses Hydra to compose the final configuration from `cluster`, `project`, `experiment`, and `grid` files specified in the command line (e.g., `cluster=my-cluster experiment=bert grid=lr_sweep`).
-        2.  Leverages Hydra's sweeper to generate the Cartesian product of all grid parameters.
-        3.  For each parameter combination, it uses Jinja2 to render a SLURM script.
-        4.  Uses Submitit to submit the rendered script to the specified SLURM cluster.
+4.  **Job Workflow**:
+    The tool supports a two-step workflow for validating and launching jobs, providing greater control and visibility.
+
+    *   **Step 1: Generate SLURM Scripts (`generate-slurm`)**
+        *   An experiment run is defined by a unique name created from the combination of an experiment config and a grid config: `<experiment_config_name>__<grid_config_name>`.
+        *   The `generate-slurm` command composes the full configuration and invokes the `job_launcher.py` script with a `--no-submit` flag.
+        *   The launcher generates a SLURM script for each job in the hyperparameter sweep and saves them to `output/<project_name>/slurm_runs/<experiment_name>/`.
+        *   This allows you to inspect and validate the generated scripts before submission.
+
+    *   **Step 2: Submit SLURM Scripts (`submit-slurm`)**
+        *   Once you have validated the scripts, the `submit-slurm` command is used to submit them.
+        *   It takes the experiment name, finds the corresponding directory in `slurm_runs/`, and submits each `.slurm` file using `sbatch`.
+
+    *   **Convenience Command (`generate-and-submit`)**
+        *   For quick iteration, the `generate-and-submit` command combines both steps into one, launching the jobs immediately without saving the intermediate scripts for validation.
