@@ -71,11 +71,21 @@ def main(cfg: DictConfig) -> None:
 
     # Build command
     cmd = build_command(cfg.experiment.script, params)
+    project_name = cfg.project.general.project_name
+    remote_base_path = cfg.cluster.remote.remote_base_path
+    container= remote_base_path + "/" + project_name + "/" + project_name + ".sif"
+    workdir="/" + project_name
+    host_test_dir= remote_base_path + "/" + project_name + "/test"
+    wandb_mode= cfg.experiment.get("wandb_mode", "offline")
 
     # Render SLURM
     slurm_text = template.render(
         job_name=f"{cfg.project.general.project_name}-{job_index}",
         cmd=cmd,
+        wandb_mode=wandb_mode,
+        host_test_dir=host_test_dir,
+        container=container,
+        workdir=workdir,
         **cfg.cluster.slurm
     )
 

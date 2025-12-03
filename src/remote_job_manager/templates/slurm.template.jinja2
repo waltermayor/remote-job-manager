@@ -9,13 +9,22 @@
 #SBATCH --gpus-per-node={{ num_gpus }}
 #SBATCH --mem={{ memory }}
 
+export SINGULARITYENV_WANDB_MODE="{{ wandb_mode }}"
+
 # Load necessary modules
 {% if modules %}
 module load {{ modules | join(' ') }}
 {% endif %}
 
-# Activate virtual environment (if any)
-# source /path/to/your/venv/bin/activate
+CONTAINER="{{ container }}"
+HOST_TEST_DIR="{{ host_test_dir }}"
+WORKDIR="{{ workdir }}"
+CMD="{{ cmd }}"
 
 # Run the experiment command
-{{ cmd }}
+singularity exec --nv \
+    --bind ${HOST_TEST_DIR}:${WORKDIR} \
+    "$CONTAINER" sh -c "
+        cd ${WORKDIR} &&
+        $CMD
+"

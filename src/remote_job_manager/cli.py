@@ -37,9 +37,10 @@ def _add_cluster_command():
         "cpus": typer.prompt("Default number of CPUs", type=int),
         "memory": typer.prompt("Default memory (e.g., 32G)"),
         "modules": typer.prompt(
-            "Modules to load (space-separated)", 
+            "Modules to load (separate by commas)", 
             default=""
-        ).split(),
+        ).split(","),
+        "path_to_project_main": typer.prompt("Path to project main (ex, /path/to/project/main)", default=""),
     }
 
 
@@ -166,20 +167,26 @@ def init(project_name: str = typer.Option(..., "--project-name", "-n", help="The
     # Create a main config.yaml as the entry point for Hydra
     with open(conf_dir / "config.yaml", "w") as f:
         f.write(
-                """# disable struct mode globally
-                _hydra_enable_legacy_struct_: true
-                
-                defaults:
-                - project: default
-                - cluster: default
-                - experiment: default
-                - grid: default
-                - _self_
+        """# disable struct mode globally
+        _hydra_enable_legacy_struct_: true
+        
+        defaults:
+        - project: default
+        - cluster: default
+        - experiment: default
+        - grid: default
+        - _self_
 
-                # These keys are used internally by the CLI
-                no_submit: false
-                slurm_output_dir: null
-                job_index: 0
+        # These keys are used internally by the CLI
+        no_submit: false
+        slurm_output_dir: null
+        job_index: 0
+        hydra:
+        run:
+            dir: .
+        sweep:
+            dir: .
+        output_subdir: null
                 """)
 
     # Create a default project config
@@ -686,6 +693,7 @@ def _create_experiment_config(project_name: str, config_name: str = None) -> str
     print("\n--- Configuring Fixed Parameters ---")
     fixed_params = {}
     fixed_params['script'] = typer.prompt("Enter the base script to run (e.g., python train.py)")
+    fixed_params['wandb_mode'] = typer.prompt("W&B mode (offline, online)", default="offline")
     print("Enter fixed parameters (key=value), one per line. Press Enter on an empty line to finish.")
     while True:
         param = typer.prompt("", default="", show_default=False)
