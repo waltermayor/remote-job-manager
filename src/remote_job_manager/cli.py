@@ -29,13 +29,12 @@ def _add_cluster_command():
     # SLURM CONFIG SECTION
     # -------------------------
     slurm_config = {
-        "account": typer.prompt("SLURM Account"),
-        "partition": typer.prompt("SLURM Partition"),
         "time": typer.prompt("Default job time (e.g., 01:00:00)"),
-        "gpu_type": typer.prompt("GPU type (e.g., a100)"),
-        "num_gpus": typer.prompt("Default number of GPUs", type=int),
-        "cpus": typer.prompt("Default number of CPUs", type=int),
         "memory": typer.prompt("Default memory (e.g., 32G)"),
+        "gres": typer.prompt("GPU type (e.g., gpu:a100:1 or gpu:1)"),
+        "cpus-per-task": typer.prompt("Default number of CPUs", type=int),
+        "mail-user": typer.prompt("SLURM Email"),
+        "mail-type": typer.prompt("email type (BEGIN,END,FAIL,ALL)", default="ALL"),        
         "modules": typer.prompt(
             "Modules to load (separate by commas)", 
             default=""
